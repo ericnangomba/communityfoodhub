@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Community Wealth Hub"
+description = "A mobile-first local food distribution platform for Elsies River and future Western Cape ward zones, connecting community clients with hubs, warehouses, delivery agents, and operational analytics."
+version = "1.0.0"
+id = "artifacts/community-wealth-hub"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20707
+
+[services.development]
+run = "pnpm --filter @workspace/community-wealth-hub run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/community-wealth-hub", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/community-wealth-hub/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20707"
+BASE_PATH = "/"

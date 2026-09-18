@@ -10,6 +10,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: catalog
+    description: Community food catalog and pricing
+  - name: orders
+    description: Client orders and fulfillment lifecycle
+  - name: operations
+    description: Hubs, deliveries, and regional operations
+  - name: analytics
+    description: Command dashboard summaries
 paths:
   /healthz:
     get:
@@ -24,6 +32,206 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /catalog:
+    get:
+      operationId: listCatalog
+      tags: [catalog]
+      summary: List published community food items
+      responses:
+        "200":
+          description: Catalog items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CatalogItem"
+  /pricing:
+    get:
+      operationId: getPricing
+      tags: [catalog]
+      summary: Get current retail baseline and community offsets
+      responses:
+        "200":
+          description: Pricing controls
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingSummary"
+    post:
+      operationId: calculatePricing
+      tags: [catalog]
+      summary: Calculate and publish community offset prices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingInput"
+      responses:
+        "200":
+          description: Updated pricing summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingSummary"
+  /hubs:
+    get:
+      operationId: listHubs
+      tags: [operations]
+      summary: List Western Cape community hubs
+      responses:
+        "200":
+          description: Hubs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hub"
+  /zones:
+    get:
+      operationId: listZones
+      tags: [operations]
+      summary: List scalable Western Cape ward zones
+      responses:
+        "200":
+          description: Ward zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WardZone"
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List orders for the active operations view
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Create a web or WhatsApp order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderInput"
+      responses:
+        "201":
+          description: Created order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+  /orders/{orderId}/status:
+    patch:
+      operationId: updateOrderStatus
+      tags: [orders]
+      summary: Advance an order through fulfillment
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderStatusInput"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+  /whatsapp/orders:
+    post:
+      operationId: parseWhatsAppOrder
+      tags: [orders]
+      summary: Parse a WhatsApp text message into an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsAppOrderInput"
+      responses:
+        "201":
+          description: Parsed order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsAppOrderResult"
+  /deliveries:
+    get:
+      operationId: listDeliveries
+      tags: [operations]
+      summary: List active delivery assignments
+      responses:
+        "200":
+          description: Delivery assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Delivery"
+  /deliveries/{deliveryId}/status:
+    patch:
+      operationId: updateDeliveryStatus
+      tags: [operations]
+      summary: Confirm a delivery milestone
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeliveryStatusInput"
+      responses:
+        "200":
+          description: Updated delivery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Delivery"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [analytics]
+      summary: Get command dashboard metrics and insights
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +241,174 @@ components:
           type: string
       required:
         - status
+    CatalogItem:
+      type: object
+      required: [id, name, category, packageSize, communityPrice, retailPrice, savingsPercent, stockQuantity, imageKey]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        category: { type: string }
+        packageSize: { type: string }
+        communityPrice: { type: number }
+        retailPrice: { type: number }
+        savingsPercent: { type: number }
+        stockQuantity: { type: integer }
+        imageKey: { type: string }
+        popular: { type: boolean }
+    PricingSummary:
+      type: object
+      required: [lastCalculatedAt, globalOffsetPercent, totalItems, projectedCommunitySavings, status]
+      properties:
+        lastCalculatedAt: { type: string }
+        globalOffsetPercent: { type: number }
+        totalItems: { type: integer }
+        projectedCommunitySavings: { type: number }
+        status: { type: string }
+    PricingInput:
+      type: object
+      required: [offsetPercent]
+      properties:
+        offsetPercent: { type: number, minimum: 0, maximum: 50 }
+    Hub:
+      type: object
+      required: [id, name, region, status, activeOrders, stockHealth, agentCount]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        region: { type: string }
+        status: { type: string }
+        activeOrders: { type: integer }
+        stockHealth: { type: number }
+        agentCount: { type: integer }
+    WardZone:
+      type: object
+      required: [id, name, municipality, hubName, households, status]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        municipality: { type: string }
+        hubName: { type: string }
+        households: { type: integer }
+        status: { type: string }
+    OrderLine:
+      type: object
+      required: [itemName, packageSize, quantity, unitPrice]
+      properties:
+        itemName: { type: string }
+        packageSize: { type: string }
+        quantity: { type: integer }
+        unitPrice: { type: number }
+    Order:
+      type: object
+      required: [id, reference, clientName, clientPhone, hubName, address, orderSource, status, totalAmount, itemCount, createdAt, lines]
+      properties:
+        id: { type: integer }
+        reference: { type: string }
+        clientName: { type: string }
+        clientPhone: { type: string }
+        hubName: { type: string }
+        address: { type: string }
+        orderSource: { type: string }
+        status: { type: string }
+        totalAmount: { type: number }
+        itemCount: { type: integer }
+        createdAt: { type: string }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/OrderLine" }
+    OrderInput:
+      type: object
+      required: [clientName, clientPhone, hubId, address, orderSource, lines]
+      properties:
+        clientName: { type: string }
+        clientPhone: { type: string }
+        hubId: { type: integer }
+        address: { type: string }
+        orderSource: { type: string }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/OrderLine" }
+    OrderStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+    WhatsAppOrderInput:
+      type: object
+      required: [message, clientName, clientPhone]
+      properties:
+        message: { type: string }
+        clientName: { type: string }
+        clientPhone: { type: string }
+    WhatsAppOrderResult:
+      type: object
+      required: [order, parsedMessage, confidence]
+      properties:
+        order: { $ref: "#/components/schemas/Order" }
+        parsedMessage: { type: string }
+        confidence: { type: number }
+    Delivery:
+      type: object
+      required: [id, orderReference, agentName, agentInitials, pickup, dropoff, status, eta]
+      properties:
+        id: { type: integer }
+        orderReference: { type: string }
+        agentName: { type: string }
+        agentInitials: { type: string }
+        pickup: { type: string }
+        dropoff: { type: string }
+        status: { type: string }
+        eta: { type: string }
+    DeliveryStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+    DashboardSummary:
+      type: object
+      required: [totalOrders, activeHubs, localSavings, retainedCurrency, corporateLeakage, serviceReinvestment, orderTrend, demandForecast, recentActivity]
+      properties:
+        totalOrders: { type: integer }
+        activeHubs: { type: integer }
+        localSavings: { type: number }
+        retainedCurrency: { type: number }
+        corporateLeakage: { type: number }
+        serviceReinvestment: { type: number }
+        orderTrend:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendPoint"
+        demandForecast:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForecastPoint"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+    TrendPoint:
+      type: object
+      required: [label, orders, retained]
+      properties:
+        label: { type: string }
+        orders: { type: integer }
+        retained: { type: number }
+    ForecastPoint:
+      type: object
+      required: [item, daysRemaining, confidence, trend]
+      properties:
+        item: { type: string }
+        daysRemaining: { type: integer }
+        confidence: { type: number }
+        trend: { type: string }
+    ActivityItem:
+      type: object
+      required: [id, title, detail, timestamp, tone]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        detail: { type: string }
+        timestamp: { type: string }
+        tone: { type: string }
 

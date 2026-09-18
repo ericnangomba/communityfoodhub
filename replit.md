@@ -1,6 +1,6 @@
-# [Project name]
+# Community Wealth Hub
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A mobile-first local food distribution platform connecting Western Cape communities with neighborhood hubs, warehouses, delivery agents, and transparent pricing.
 
 ## Run & Operate
 
@@ -22,23 +22,33 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/community-wealth-hub/` — React/Vite client with role-aware storefront, fulfillment, delivery, command dashboard, pricing, and ward-zone views.
+- `artifacts/api-server/src/routes/community.ts` — demo API routes, seed data, order lifecycle, WhatsApp parsing, pricing offsets, and analytics payloads.
+- `lib/api-spec/openapi.yaml` — source of truth for the catalog, orders, operations, pricing, and dashboard API.
+- `lib/db/src/schema/index.ts` — relational schema for users, hubs, warehouses, inventory, orders, and analytics logs.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- API contracts are defined in OpenAPI first and generate the React Query client and Zod validation schemas.
+- The pilot experience uses deterministic Elsies River seed data in the API process so every role has a usable first-load demo.
+- Pricing is calculated from a retail baseline with a published global community offset, so catalog prices and admin controls share one source of truth.
+- Western Cape ward zones are modeled separately from hubs so new zones can be onboarded without changing the core order flow.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Clients browse repackaged essentials, add them to a cart, choose a delivery address, checkout, and simulate WhatsApp text orders.
+- Hub operators can review incoming web and WhatsApp orders and move them through warehouse packing, dispatch, and delivery.
+- Delivery agents see pickup and drop-off details and confirm delivery milestones from a mobile-friendly portal.
+- Super admins can monitor hubs, stock health, demand forecasts, retained local currency, and published pricing offsets.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+_No persistent preferences recorded._
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run API codegen after changing `lib/api-spec/openapi.yaml` so frontend hooks and Zod schemas stay aligned.
+- The web artifact depends on the shared API service under `/api`; use the managed workflows rather than starting Vite manually.
 
 ## Pointers
 
