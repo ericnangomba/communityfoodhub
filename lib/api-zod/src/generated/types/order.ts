@@ -16,6 +16,8 @@ export interface Order {
   address: string;
   orderSource: string;
   status: string;
+  paymentMethod: string;
+  paymentStatus: string;
   totalAmount: number;
   itemCount: number;
   createdAt: string;

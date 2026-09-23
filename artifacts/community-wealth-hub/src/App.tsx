@@ -1,8 +1,9 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import {
   Activity,
+  ArrowLeft,
   ArrowDownRight,
   ArrowRight,
   BadgeCheck,
@@ -20,6 +21,7 @@ import {
   LayoutDashboard,
   Leaf,
   LineChart,
+  LogOut,
   MapPin,
   Menu,
   MessageCircle,
@@ -77,11 +79,53 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import paymerchLogo from '@assets/mlogopaymerch_1789737270045.png';
 import './index.css';
 
 const queryClient = new QueryClient();
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 type Role = 'client' | 'hub' | 'agent' | 'super';
+type AuthRole = 'CLIENT' | 'HUB_ADMIN' | 'DELIVERY_AGENT' | 'SUPER_ADMIN';
+type AuthUser = { id: number; fullName: string; email: string; phoneNumber: string; role: AuthRole; hubId: number | null };
+type AccessUser = Pick<AuthUser, 'id' | 'fullName' | 'email' | 'phoneNumber' | 'role' | 'hubId'>;
+
+type AuthContextValue = {
+  user: AuthUser | null;
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  register: (fullName: string, email: string, phoneNumber: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used inside AuthProvider');
+  return context;
+}
+
+async function authRequest(path: string, options?: RequestInit) {
+  const response = await fetch(`/api/auth/${path}`, { ...options, credentials: 'include', headers: { 'content-type': 'application/json', ...(options?.headers ?? {}) } });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error ?? 'Authentication request failed');
+  return payload as { user?: AuthUser };
+}
+
+function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { authRequest('me').then((payload) => setUser(payload.user ?? null)).catch(() => setUser(null)).finally(() => setLoading(false)); }, []);
+  const value: AuthContextValue = {
+    user,
+    loading,
+    signIn: async (email, password) => { const payload = await authRequest('login', { method: 'POST', body: JSON.stringify({ email, password }) }); setUser(payload.user ?? null); },
+    register: async (fullName, email, phoneNumber, password) => { const payload = await authRequest('register', { method: 'POST', body: JSON.stringify({ fullName, email, phoneNumber, password }) }); setUser(payload.user ?? null); },
+    signOut: async () => { await authRequest('logout', { method: 'POST' }).catch(() => undefined); setUser(null); },
+  };
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
 const roles: { id: Role; label: string; detail: string; icon: typeof ShoppingBasket; href: string }[] = [
   { id: 'client', label: 'Community Client', detail: 'Shop household staples', icon: ShoppingBasket, href: '/shop' },
   { id: 'hub', label: 'Hub Admin', detail: 'Run the order queue', icon: Store, href: '/orders' },
@@ -101,6 +145,26 @@ const navGroups = [
     { href: '/zones', label: 'Ward coverage', icon: MapPin, role: 'super' as Role },
   ] },
 ];
+
+const productImages: Record<string, string> = {
+  rice: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=700&q=82',
+  maize: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&w=700&q=82',
+  oil: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=700&q=82',
+  sugar: 'https://images.unsplash.com/photo-1581268497302-7e4c4ea5fb6c?auto=format&fit=crop&w=700&q=82',
+  bread: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=700&q=82',
+  beans: 'https://images.unsplash.com/photo-1612257999756-4bdfadf4b0a3?auto=format&fit=crop&w=700&q=82',
+  washing: 'https://images.unsplash.com/photo-1585832770485-e68a5dbfad52?auto=format&fit=crop&w=700&q=82',
+  tea: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=700&q=82',
+};
+
+function setIntendedRole(role: Role) {
+  window.sessionStorage.setItem('cwh-intended-role', role);
+}
+
+function intendedRole(): Role {
+  const role = window.sessionStorage.getItem('cwh-intended-role');
+  return role === 'super' || role === 'hub' || role === 'agent' ? role : 'client';
+}
 
 function money(value: number) {
   return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0 }).format(value);
@@ -162,13 +226,22 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const { user, signOut } = useAuth();
   const currentRole = roles.find((item) => item.id === role) ?? roles[3];
+  const isClient = user?.role === 'CLIENT';
+  const visibleGroups = isClient
+    ? [{ label: 'Community', items: [
+      { href: '/shop', label: 'Shop', icon: ShoppingBasket, role: 'client' as Role },
+      { href: '/orders', label: 'Order status', icon: Package, role: 'client' as Role },
+      { href: '/deliveries', label: 'Delivery status', icon: Bike, role: 'client' as Role },
+    ] }]
+    : navGroups.filter((group) => group.items.some((item) => item.role === role));
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
       <div className="sidebar-head"><Brand compact /><button className="icon-button sidebar-close" onClick={() => setMobileOpen(false)} data-testid="button-close-menu"><X size={18} /></button></div>
       <div className="network-badge"><span className="live-pulse" /> Elsies River network <ChevronDown size={14} /></div>
       <nav className="sidebar-nav">
-        {navGroups.map((group) => <div className="nav-group" key={group.label}>
+        {visibleGroups.map((group) => <div className="nav-group" key={group.label}>
           <p>{group.label}</p>
           {group.items.map((item) => <Link key={item.href} href={item.href} className={`nav-link ${location === item.href ? 'active' : ''}`} onClick={() => setMobileOpen(false)} data-testid={`link-${item.label.toLowerCase().replaceAll(' ', '-')}`}>
             <item.icon size={17} /><span>{item.label}</span>{location === item.href && <span className="nav-active-mark" />}
@@ -177,14 +250,15 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
       </nav>
       <div className="sidebar-bottom">
         <div className="side-note"><Sparkles size={15} /><div><b>Local first</b><span>Every order keeps value moving nearby.</span></div></div>
-        <div className="profile-chip"><span className="avatar">{initials(currentRole.label)}</span><div><b>{currentRole.label}</b><span>Elsies River · Western Cape</span></div><Settings2 size={15} /></div>
+        <div className="profile-chip"><span className="avatar">{initials(user?.fullName ?? currentRole.label)}</span><div><b>{user?.fullName ?? currentRole.label}</b><span>{user?.email ?? 'Elsies River · Western Cape'}</span></div><Settings2 size={15} /></div>
+        <button className="signout-button" onClick={() => void signOut()} data-testid="button-sign-out"><LogOut size={15} /> Sign out</button>
       </div>
     </aside>
     <main className="main-content">
-      <header className="topbar">
+       <header className="topbar">
         <button className="mobile-menu icon-button" onClick={() => setMobileOpen(true)} data-testid="button-open-menu"><Menu size={20} /></button>
-        <div className="topbar-copy">{eyebrow && <span>{eyebrow}</span>}<h1>{title}</h1></div>
-        <div className="topbar-actions"><span className="connection"><span className="live-pulse" /> Live network</span><button className="icon-button" onClick={() => setNoticeOpen((current) => !current)} data-testid="button-notifications"><Bell size={18} /><i /></button><div className="top-avatar">{initials(currentRole.label)}</div></div>
+         <div className="topbar-copy">{eyebrow && <span>{eyebrow}</span>}<h1>{title}</h1></div>
+         <div className="topbar-actions"><span className="connection"><span className="live-pulse" /> Live network</span><button className="icon-button" onClick={() => setNoticeOpen((current) => !current)} data-testid="button-notifications"><Bell size={18} /><i /></button><div className="top-avatar">{initials(user?.fullName ?? currentRole.label)}</div></div>
       </header>
       {noticeOpen && <div className="notice-popover" data-testid="notice-popover"><b>Network is moving well.</b><span>No new alerts for this workspace.</span></div>}
       <div className="page-wrap">{children}</div>
@@ -202,18 +276,17 @@ function Home() {
     <div className="entry-grid">
       <section className="entry-copy">
         <div className="eyebrow"><span className="eyebrow-line" /> A neighborhood utility</div>
-        <h1>Food that stays <i>in the community.</i></h1>
+         <h1>Wealth that stays <i>in the community.</i></h1>
         <p className="entry-lede">Community Wealth Hub connects Elsies River households, local hubs and delivery teams around one simple promise: better access, with more value kept close to home.</p>
         <div className="entry-stats"><div><strong>04</strong><span>active hubs</span></div><div><strong>1,240</strong><span>households reached</span></div><div><strong>18.6%</strong><span>value retained locally</span></div></div>
       </section>
       <section className="role-card">
-        <div className="role-card-head"><span className="tiny-label">Enter your workspace</span><span className="mono">CW / 01</span></div>
-        <h2>What are you here to do?</h2>
-        <div className="role-list">{roles.map((item) => <button key={item.id} className={`role-option ${role === item.id ? 'selected' : ''}`} onClick={() => setRole(item.id)} data-testid={`button-role-${item.id}`}>
+        <div className="role-card-head"><span className="tiny-label">Sign In</span></div>
+        <h2>Sign In</h2>
+         <div className="role-list">{roles.filter((item) => item.id === 'client' || item.id === 'super').map((item) => <button key={item.id} className={`role-option ${role === item.id ? 'selected' : ''}`} onClick={() => setRole(item.id)} data-testid={`button-role-${item.id}`}>
           <span className="role-icon"><item.icon size={19} /></span><span><b>{item.label}</b><small>{item.detail}</small></span><ArrowRight size={17} className="role-arrow" />
         </button>)}</div>
-        <button className="button button-primary button-wide" onClick={() => setLocation(roles.find((item) => item.id === role)?.href ?? '/shop')} data-testid="button-enter-workspace">Enter workspace <ArrowRight size={16} /></button>
-        <p className="role-foot">No account needed for this preview · role-based views</p>
+         <button className="button button-primary button-wide" onClick={() => { setIntendedRole(role); setLocation(role === 'client' ? '/sign-up' : '/sign-in'); }} data-testid="button-enter-workspace">{role === 'client' ? 'Register as a client' : 'Super admin sign in'} <ArrowRight size={16} /></button>
       </section>
     </div>
     <footer className="entry-footer"><span>Western Cape · South Africa</span><span>Built for local circulation, not extraction.</span><span className="mono">v1.0 / LIVE</span></footer>
@@ -230,6 +303,7 @@ function ShopPage() {
   const [address, setAddress] = useState('');
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('PAYMERCH');
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [whatsappText, setWhatsappText] = useState('Hi, please send 2 rice 2kg and 1 cooking oil 750ml to 14 Avon Road, Elsies River.');
   const [confirmation, setConfirmation] = useState<Order | null>(null);
@@ -242,8 +316,8 @@ function ShopPage() {
   const setQuantity = (id: number, amount: number) => setCart((current) => ({ ...current, [id]: Math.max(0, amount) }));
   const submitOrder = () => {
     const hubId = hubs.data?.[0]?.id;
-    if (!hubId || !clientName || !phone || !address || !cartItems.length) return;
-    createOrder.mutate({ data: { clientName, clientPhone: phone, hubId, address, orderSource: 'web', lines: cartItems.map((item) => ({ itemName: item.name, packageSize: item.packageSize, quantity: cart[item.id] ?? 0, unitPrice: item.communityPrice })) } }, {
+    if (!hubId || !clientName || !phone || !address || !cartItems.length || !paymentMethod) return;
+    createOrder.mutate({ data: { clientName, clientPhone: phone, hubId, address, orderSource: 'WEB_APP', paymentMethod, lines: cartItems.map((item) => ({ itemName: item.name, packageSize: item.packageSize, quantity: cart[item.id] ?? 0, unitPrice: item.communityPrice })) } }, {
       onSuccess: (order) => { setConfirmation(order); setCart({}); queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }); },
     });
   };
@@ -259,7 +333,7 @@ function ShopPage() {
         <div className="cart-head"><div><span className="tiny-label">Your basket</span><h3>{itemCount ? `${itemCount} item${itemCount === 1 ? '' : 's'}` : 'Start with the essentials'}</h3></div><span className="cart-count">{itemCount}</span></div>
         {cartItems.length ? <div className="cart-lines">{cartItems.map((item) => <div className="cart-line" key={item.id}><span className="cart-thumb">{item.name.slice(0, 1)}</span><div><b>{item.name}</b><small>{item.packageSize} · {money(item.communityPrice)}</small></div><div className="quantity-control"><button onClick={() => setQuantity(item.id, (cart[item.id] ?? 0) - 1)} data-testid={`button-decrease-${item.id}`}><Minus size={13} /></button><span>{cart[item.id]}</span><button onClick={() => setQuantity(item.id, (cart[item.id] ?? 0) + 1)} data-testid={`button-increase-${item.id}`}><Plus size={13} /></button></div></div>)}</div> : <div className="cart-empty"><ShoppingCart size={28} /><span>Your basket is waiting.</span><small>Add a few pantry staples to see your community total.</small></div>}
         <div className="cart-summary"><div><span>Community total</span><strong>{money(total)}</strong></div><div className="saving-line"><span>Your saving today</span><b>{money(cartItems.reduce((sum, item) => sum + (item.retailPrice - item.communityPrice) * (cart[item.id] ?? 0), 0))}</b></div></div>
-        <div className="checkout-form"><span className="tiny-label">Delivery details</span><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Your name" data-testid="input-client-name" /><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Mobile number" data-testid="input-client-phone" /><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Street address in Elsies River" data-testid="input-delivery-address" /><button className="button button-primary button-wide" disabled={!cartItems.length || !clientName || !phone || !address || createOrder.isPending} onClick={submitOrder} data-testid="button-place-order">{createOrder.isPending ? 'Sending order…' : 'Place community order'} <ArrowRight size={16} /></button><button className="whatsapp-button" onClick={() => setWhatsappOpen(true)} data-testid="button-open-whatsapp"><MessageCircle size={17} /> Order through WhatsApp</button></div>
+         <div className="checkout-form"><span className="tiny-label">Delivery details</span><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Your name" data-testid="input-client-name" /><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Mobile number" data-testid="input-client-phone" /><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Street address in Elsies River" data-testid="input-delivery-address" /><span className="tiny-label payment-label">Choose payment</span><div className="payment-methods" role="group" aria-label="Payment methods"><button type="button" className={`payment-method ${paymentMethod === 'PAYMERCH' ? 'selected' : ''}`} onClick={() => setPaymentMethod('PAYMERCH')} data-testid="button-payment-paymerch"><img src={paymerchLogo} alt="Paymerch Mobile" /><span><b>Paymerch</b><small>Partner checkout</small></span><Check size={15} /></button><button type="button" className={`payment-method ${paymentMethod === 'PAYSHAP' ? 'selected' : ''}`} onClick={() => setPaymentMethod('PAYSHAP')} data-testid="button-payment-payshap"><span className="payment-mark payshap-mark">P</span><span><b>PayShap</b><small>Instant bank payment</small></span><Check size={15} /></button><button type="button" className={`payment-method ${paymentMethod === 'CARD' ? 'selected' : ''}`} onClick={() => setPaymentMethod('CARD')} data-testid="button-payment-card"><span className="payment-mark card-mark"><CreditCard size={16} /></span><span><b>Card</b><small>Visa or Mastercard</small></span><Check size={15} /></button></div><button className="button button-primary button-wide" disabled={!cartItems.length || !clientName || !phone || !address || !paymentMethod || createOrder.isPending} onClick={submitOrder} data-testid="button-place-order">{createOrder.isPending ? 'Sending order…' : `Pay ${money(total)}`} <ArrowRight size={16} /></button><button className="whatsapp-button" onClick={() => setWhatsappOpen(true)} data-testid="button-open-whatsapp"><MessageCircle size={17} /> Order through WhatsApp</button></div>
         {confirmation && <div className="confirmation"><Check size={16} /><span>Order <b>{confirmation.reference}</b> is with the hub.</span><button onClick={() => setConfirmation(null)} data-testid="button-dismiss-confirmation"><X size={14} /></button></div>}
       </aside>
     </div>
@@ -268,7 +342,7 @@ function ShopPage() {
 }
 
 function ProductCard({ item, quantity, onQuantity }: { item: CatalogItem; quantity: number; onQuantity: (value: number) => void }) {
-  return <article className={`product-card ${quantity ? 'in-cart' : ''}`} data-testid={`card-product-${item.id}`}><div className={`product-art art-${item.id % 5}`}><span>{item.name.slice(0, 1)}</span>{item.popular && <small>Popular</small>}</div><div className="product-info"><div><span className="product-category">{item.category}</span><h3>{item.name}</h3><p>{item.packageSize}</p></div><div className="price-row"><div><strong>{money(item.communityPrice)}</strong><del>{money(item.retailPrice)}</del></div>{quantity ? <div className="quantity-control"><button onClick={() => onQuantity(quantity - 1)} data-testid={`button-product-decrease-${item.id}`}><Minus size={13} /></button><span>{quantity}</span><button onClick={() => onQuantity(quantity + 1)} data-testid={`button-product-increase-${item.id}`}><Plus size={13} /></button></div> : <button className="add-button" onClick={() => onQuantity(1)} data-testid={`button-add-product-${item.id}`}><Plus size={16} /></button>}</div></div></article>;
+  return <article className={`product-card ${quantity ? 'in-cart' : ''}`} data-testid={`card-product-${item.id}`}><div className={`product-art art-${item.id % 5}`}><img src={productImages[item.imageKey]} alt={`${item.name} ${item.packageSize}`} loading="lazy" />{item.popular && <small>Popular</small>}</div><div className="product-info"><div><span className="product-category">{item.category}</span><h3>{item.name}</h3><p>{item.packageSize}</p></div><div className="price-row"><div><strong>{money(item.communityPrice)}</strong><del>{money(item.retailPrice)}</del></div>{quantity ? <div className="quantity-control"><button onClick={() => onQuantity(quantity - 1)} data-testid={`button-product-decrease-${item.id}`}><Minus size={13} /></button><span>{quantity}</span><button onClick={() => onQuantity(quantity + 1)} data-testid={`button-product-increase-${item.id}`}><Plus size={13} /></button></div> : <button className="add-button" onClick={() => onQuantity(1)} data-testid={`button-add-product-${item.id}`}><Plus size={16} /></button>}</div></div></article>;
 }
 
 function OrdersPage() {
@@ -301,9 +375,80 @@ function DeliveryCard({ delivery, index, onConfirm, pending }: { delivery: Deliv
 function CommandPage() {
   const dashboard = useGetDashboard({ query: { queryKey: getGetDashboardQueryKey(), refetchInterval: 60_000 } });
   const hubs = useListHubs({ query: { queryKey: getListHubsQueryKey(), refetchInterval: 60_000 } });
+  const catalog = useListCatalog({ query: { queryKey: getListCatalogQueryKey(), refetchInterval: 60_000 } });
   const pricing = useGetPricing({ query: { queryKey: getGetPricingQueryKey(), staleTime: 60_000 } });
   const data = dashboard.data;
-  return <AppShell role="super" eyebrow="Super admin · Network intelligence" title="The whole picture, clearly."><QueryState loading={dashboard.isLoading} error={dashboard.isError} onRetry={() => dashboard.refetch()}><div className="command-intro"><div><span className="eyebrow"><span className="eyebrow-line" /> Wednesday, 12 June · 08:42</span><h2>Good morning, <i>builders.</i></h2><p>Here is how local circulation is holding up across the network.</p></div><div className="command-actions"><button className="button button-secondary" onClick={() => { dashboard.refetch(); hubs.refetch(); pricing.refetch(); }} data-testid="button-refresh-command"><RefreshCw size={15} /> Sync data</button><Link href="/pricing" className="button button-primary" data-testid="link-command-pricing"><SlidersHorizontal size={15} /> Adjust pricing</Link></div></div>{data && <><div className="metric-grid"><Metric label="Orders this month" value={data.totalOrders.toLocaleString()} note="+12.4% vs last month" icon={ShoppingBasket} accent="sun" /><Metric label="Active hubs" value={String(data.activeHubs).padStart(2, '0')} note="All hubs reporting" icon={Store} accent="mint" /><Metric label="Local savings" value={money(data.localSavings)} note="Passed to households" icon={WalletCards} accent="coral" /><Metric label="Currency retained" value={money(data.retainedCurrency)} note="Circulating in the network" icon={LineChart} accent="blue" /></div><div className="command-grid"><Panel className="trend-panel"><div className="panel-head"><div><span className="tiny-label">Network pulse</span><h3>Orders & value retained</h3></div><span className="panel-period">Last 7 weeks <ChevronDown size={14} /></span></div><TrendChart points={data.orderTrend} /></Panel><Panel className="hubs-panel"><div className="panel-head"><div><span className="tiny-label">Operational health</span><h3>Community hubs</h3></div><Link href="/zones" className="text-link" data-testid="link-view-hubs">View coverage <ArrowRight size={14} /></Link></div><div className="hub-list">{(hubs.data ?? []).map((hub) => <HubRow key={hub.id} hub={hub} />)}</div></Panel><Panel className="forecast-panel"><div className="panel-head"><div><span className="tiny-label">Demand signal</span><h3>Stock to watch</h3></div><BarChart3 size={17} /></div><div className="forecast-list">{data.demandForecast.map((item) => <div className="forecast-row" key={item.item}><div><b>{item.item}</b><small>{item.confidence}% confidence · {item.trend}</small></div><div className={`forecast-days ${item.daysRemaining < 5 ? 'urgent' : ''}`}><strong>{item.daysRemaining}</strong><small>days</small></div></div>)}</div></Panel><Panel className="activity-panel"><div className="panel-head"><div><span className="tiny-label">Live ledger</span><h3>Recent activity</h3></div><Activity size={17} /></div><div className="activity-list">{data.recentActivity.map((item) => <div className="activity-row" key={item.id}><span className={`activity-dot ${statusTone(item.tone)}`} /><div><b>{item.title}</b><small>{item.detail}</small></div><time>{item.timestamp}</time></div>)}</div></Panel></div><div className="leakage-strip"><div><span className="tiny-label">The point of the network</span><h3>Less leakage. More life in the places we share.</h3></div><div className="leakage-stats"><div><small>Corporate leakage</small><strong>{money(data.corporateLeakage)}</strong></div><ArrowRight size={20} /><div><small>Service reinvestment</small><strong className="green-text">{money(data.serviceReinvestment)}</strong></div></div></div></>}</QueryState></AppShell>;
+  return (
+    <AppShell role="super" eyebrow="Super admin · Network intelligence" title="The whole picture, clearly.">
+      <QueryState loading={dashboard.isLoading} error={dashboard.isError} onRetry={() => dashboard.refetch()}>
+        <div className="command-intro">
+          <div>
+            <span className="eyebrow"><span className="eyebrow-line" /> Network intelligence center</span>
+            <h2>Good morning, <i>builders.</i></h2>
+            <p>Here is how local circulation is holding up across the network.</p>
+          </div>
+          <div className="command-actions">
+            <button className="button button-secondary" onClick={() => { dashboard.refetch(); hubs.refetch(); pricing.refetch(); catalog.refetch(); }} data-testid="button-refresh-command"><RefreshCw size={15} /> Sync data</button>
+            <Link href="/pricing" className="button button-primary" data-testid="link-command-pricing"><SlidersHorizontal size={15} /> Adjust pricing</Link>
+          </div>
+        </div>
+        {data && (
+          <>
+            <div className="metric-grid">
+              <Metric label="Orders this month" value={data.totalOrders.toLocaleString()} note="+12.4% vs last month" icon={ShoppingBasket} accent="sun" />
+              <Metric label="Active hubs" value={String(data.activeHubs).padStart(2, '0')} note="All hubs reporting" icon={Store} accent="mint" />
+              <Metric label="Local savings" value={money(data.localSavings)} note="Passed to households" icon={WalletCards} accent="coral" />
+              <Metric label="Currency retained" value={money(data.retainedCurrency)} note="Circulating in the network" icon={LineChart} accent="blue" />
+            </div>
+            <div className="command-grid">
+              <Panel className="trend-panel">
+                <div className="panel-head"><div><span className="tiny-label">Network pulse</span><h3>Orders & value retained</h3></div><span className="panel-period">Last 7 weeks <ChevronDown size={14} /></span></div>
+                <TrendChart points={data.orderTrend} />
+              </Panel>
+              <Panel className="hubs-panel">
+                <div className="panel-head"><div><span className="tiny-label">Operational health</span><h3>Community hubs</h3></div><Link href="/zones" className="text-link">View coverage <ArrowRight size={14} /></Link></div>
+                <div className="hub-list">{(hubs.data ?? []).map((hub) => <HubRow key={hub.id} hub={hub} />)}</div>
+              </Panel>
+              <Panel className="forecast-panel">
+                <div className="panel-head"><div><span className="tiny-label">Demand signal</span><h3>Stock to watch</h3></div><BarChart3 size={17} /></div>
+                <div className="forecast-list">{data.demandForecast.map((item) => <div className="forecast-row" key={item.item}><div><b>{item.item}</b><small>{item.confidence}% confidence · {item.trend}</small></div><div className={`forecast-days ${item.daysRemaining < 5 ? 'urgent' : ''}`}><strong>{item.daysRemaining}</strong><small>days</small></div></div>)}</div>
+              </Panel>
+              <Panel className="activity-panel">
+                <div className="panel-head"><div><span className="tiny-label">Live ledger</span><h3>Recent activity</h3></div><Activity size={17} /></div>
+                <div className="activity-list">{data.recentActivity.map((item) => <div className="activity-row" key={item.id}><span className={`activity-dot ${statusTone(item.tone)}`} /><div><b>{item.title}</b><small>{item.detail}</small></div><time>{item.timestamp}</time></div>)}</div>
+              </Panel>
+            </div>
+            <div className="leakage-strip"><div><span className="tiny-label">The point of the network</span><h3>Less leakage. More life in the places we share.</h3></div><div className="leakage-stats"><div><small>Corporate leakage</small><strong>{money(data.corporateLeakage)}</strong></div><ArrowRight size={20} /><div><small>Service reinvestment</small><strong className="green-text">{money(data.serviceReinvestment)}</strong></div></div></div>
+            <div className="admin-control-grid">
+              <StockPanel items={catalog.data ?? []} />
+              <AccessPanel hubs={hubs.data ?? []} />
+            </div>
+            <Panel className="insight-panel">
+              <div className="panel-head"><div><span className="tiny-label">AI-assisted monitor</span><h3>Intelligence center</h3></div><Sparkles size={17} /></div>
+              <div className="insight-grid">
+                <div><span className="insight-badge positive">Demand</span><b>Rice demand is rising in Elsies River</b><small>Recommendation: protect 4 days of safety stock before the next order wave.</small></div>
+                <div><span className="insight-badge warning">Attention</span><b>Brown Bread needs replenishment</b><small>Current forecast gives the hub 2 days of cover. Route a supplier top-up now.</small></div>
+                <div><span className="insight-badge stable">Network</span><b>Local value retention is healthy</b><small>The current mix of community pricing and delivery coverage is keeping value nearby.</small></div>
+              </div>
+            </Panel>
+          </>
+        )}
+      </QueryState>
+    </AppShell>
+  );
+}
+
+function StockPanel({ items }: { items: CatalogItem[] }) {
+  return <Panel className="stock-panel"><div className="panel-head"><div><span className="tiny-label">Warehouse stock</span><h3>Inventory at a glance</h3></div><Database size={17} /></div><div className="stock-list">{items.map((item) => <div className="stock-row" key={item.id}><div><b>{item.name}</b><small>{item.packageSize} · R{item.communityPrice.toFixed(2)}</small></div><div className="stock-bar"><span className={item.stockQuantity < 30 ? 'low' : ''} style={{ width: `${Math.min(100, (item.stockQuantity / 150) * 100)}%` }} /></div><strong className={item.stockQuantity < 30 ? 'low-text' : ''}>{item.stockQuantity}</strong></div>)}</div></Panel>;
+}
+
+function AccessPanel({ hubs }: { hubs: Hub[] }) {
+  const { user: currentUser } = useAuth();
+  const [users, setUsers] = useState<AccessUser[]>([]);
+  const [busy, setBusy] = useState<number | null>(null);
+  useEffect(() => { fetch('/api/auth/users', { credentials: 'include' }).then((response) => response.json()).then((payload) => setUsers(payload.users ?? [])).catch(() => setUsers([])); }, []);
+  const assign = async (userId: number, role: AuthRole, hubId: number | null) => { setBusy(userId); try { const response = await fetch(`/api/auth/users/${userId}/role`, { method: 'PATCH', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ role, hubId }) }); const payload = await response.json(); if (response.ok) setUsers((current) => current.map((item) => item.id === userId ? payload.user : item)); } finally { setBusy(null); } };
+  return <Panel className="access-panel"><div className="panel-head"><div><span className="tiny-label">Resource access</span><h3>Assign the team</h3></div><Users size={17} /></div><p className="panel-helper">Community clients register themselves. Assign Hub Admin and Delivery Agent access here.</p><div className="access-list">{users.map((item) => <div className="access-row" key={item.id}><div><b>{item.fullName}</b><small>{item.email}</small></div><select disabled={busy === item.id || item.id === currentUser?.id} value={item.role} onChange={(event) => void assign(item.id, event.target.value as AuthRole, item.hubId)}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><select disabled={busy === item.id || item.id === currentUser?.id} value={item.hubId ?? ''} onChange={(event) => void assign(item.id, item.role, event.target.value ? Number(event.target.value) : null)}><option value="">All hubs</option>{hubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.name}</option>)}</select></div>)}</div></Panel>;
 }
 
 function HubRow({ hub }: { hub: Hub }) {
@@ -333,13 +478,72 @@ function ZonesPage() {
   return <AppShell role="super" eyebrow="Network · Ward coverage" title="Know where the work lands."><div className="zones-intro"><div><span className="eyebrow"><span className="eyebrow-line" /> Western Cape map room</span><h2>Coverage is a <i>relationship.</i></h2><p>Track household reach by ward and keep each local hub resourced for the work ahead.</p></div><div className="coverage-total"><strong>{rows.reduce((sum, zone) => sum + zone.households, 0).toLocaleString()}</strong><span>households in view</span></div></div><QueryState loading={zones.isLoading} error={zones.isError} empty={!rows.length} onRetry={() => zones.refetch()}><div className="zones-grid"><Panel className="map-panel"><div className="panel-head"><div><span className="tiny-label">Coverage view</span><h3>Ward network</h3></div><div className="map-tools"><button className="icon-button" onClick={() => zones.refetch()} data-testid="button-map-search"><Search size={16} /></button><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-map-settings"><Settings2 size={16} /></button></div></div><div className="map-canvas"><div className="map-river river-one" /><div className="map-river river-two" />{rows.map((zone, index) => <button key={zone.id} className={`map-node node-${index % 6} ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-node-${zone.id}`}><span>{zone.households}</span><i /></button>)}<div className="map-label label-north">NORTH</div><div className="map-label label-south">SOUTHERN SUBURBS</div><div className="map-scale">5 km <span /></div></div><div className="map-legend"><span><i className="legend-node active" /> Active coverage</span><span><i className="legend-node growing" /> Growing reach</span><span><i className="legend-node watch" /> Needs attention</span></div></Panel><Panel className="zone-list-panel"><div className="panel-head"><div><span className="tiny-label">Ward register</span><h3>{rows.length} zones · sorted by reach</h3></div><span className="mono">WC / ZONES</span></div><div className="zone-list">{rows.map((zone) => <button key={zone.id} className={`zone-row ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-${zone.id}`}><span className="zone-number">{String(zone.id).padStart(2, '0')}</span><div><b>{zone.name}</b><small>{zone.municipality} · {zone.hubName}</small></div><strong>{zone.households.toLocaleString()}</strong><StatusPill status={zone.status} /></button>)}</div>{selectedZone && <div className="zone-detail"><div className="zone-detail-head"><span className="hub-avatar">{initials(selectedZone.hubName)}</span><div><span className="tiny-label">Selected ward</span><h3>{selectedZone.name}</h3></div><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-close-zone-detail"><X size={16} /></button></div><div className="zone-detail-meta"><span><Users size={15} /> {selectedZone.households.toLocaleString()} households</span><span><Store size={15} /> {selectedZone.hubName}</span></div></div>}</Panel></div></QueryState></AppShell>;
 }
 
+function RoleGate({ role, children }: { role: Role; children: ReactNode }) {
+  const { loading, user } = useAuth();
+  const [, setLocation] = useLocation();
+  if (loading) return <div className="auth-loading"><span className="live-pulse" /> Loading workspace…</div>;
+  if (!user) {
+    setLocation('/sign-in');
+    return null;
+  }
+  const normalizedRole = user.role === 'SUPER_ADMIN' ? 'super' : user.role === 'HUB_ADMIN' ? 'hub' : user.role === 'DELIVERY_AGENT' ? 'agent' : 'client';
+  if (normalizedRole !== role) {
+    setLocation(normalizedRole === 'client' ? '/shop' : normalizedRole === 'hub' ? '/orders' : normalizedRole === 'agent' ? '/deliveries' : '/command');
+    return null;
+  }
+  return children;
+}
+
+function ClientOrdersPage() {
+  const { user } = useAuth();
+  const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 15_000 } });
+  const rows = (orders.data ?? []).filter((order) => order.clientName === user?.fullName);
+  return <AppShell role="client" eyebrow="Community account · Orders" title="Keep track of every basket."><Panel className="client-status-panel"><div className="panel-head"><div><span className="tiny-label">Your order queue</span><h2>Orders in motion</h2></div><button className="button button-secondary" onClick={() => orders.refetch()}><RefreshCw size={15} /> Refresh</button></div><QueryState loading={orders.isLoading} error={orders.isError} empty={!rows.length} onRetry={() => orders.refetch()}><div className="client-order-list">{rows.map((order) => <div className="client-order-row" key={order.id}><div><b>{order.reference}</b><small>{shortDate(order.createdAt)} · {order.itemCount} items</small></div><strong>{money(order.totalAmount)}</strong><StatusPill status={order.status} /></div>)}</div></QueryState></Panel></AppShell>;
+}
+
+function ClientDeliveryStatusPage() {
+  const { user } = useAuth();
+  const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 15_000 } });
+  const deliveries = useListDeliveries({ query: { queryKey: getListDeliveriesQueryKey(), refetchInterval: 15_000 } });
+  const references = new Set((orders.data ?? []).filter((order) => order.clientName === user?.fullName).map((order) => order.reference));
+  const rows = (deliveries.data ?? []).filter((delivery) => references.has(delivery.orderReference));
+  return <AppShell role="client" eyebrow="Community account · Delivery" title="Know when it is on the way."><Panel className="client-status-panel"><div className="panel-head"><div><span className="tiny-label">Live delivery status</span><h2>Your doorstep updates</h2></div><span className="status-pill green"><span className="status-dot" /> Live updates</span></div><QueryState loading={orders.isLoading || deliveries.isLoading} error={orders.isError || deliveries.isError} empty={!rows.length} onRetry={() => { void orders.refetch(); void deliveries.refetch(); }}><div className="client-order-list">{rows.map((delivery) => <div className="client-order-row" key={delivery.id}><div><b>{delivery.orderReference}</b><small>{delivery.dropoff}</small></div><strong>{delivery.eta}</strong><StatusPill status={delivery.status} /></div>)}</div></QueryState></Panel></AppShell>;
+}
+
+function SignInPage() {
+  const { signIn } = useAuth();
+  const [, setLocation] = useLocation();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setPending(true); try { await signIn(email, password); const role = email.toLowerCase() === 'admin@comhub.co.za' ? 'command' : 'shop'; setLocation(`/${role}`); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to sign in'); } finally { setPending(false); } };
+  return <div className="auth-page"><div className="auth-card"><Brand /><span className="eyebrow"><span className="eyebrow-line" /> Community Wealth Hub</span><h1>Sign in</h1><form onSubmit={submit} className="auth-form"><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="button button-primary button-wide" disabled={pending}>{pending ? 'Signing in…' : 'Sign in'}</button></form><p className="auth-switch">Need a community account? <Link href="/sign-up">Register</Link></p></div></div>;
+}
+
+function SignUpPage() {
+  const { register } = useAuth();
+  const [, setLocation] = useLocation();
+  const [form, setForm] = useState({ fullName: '', email: '', phoneNumber: '', password: '' });
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setPending(true); try { await register(form.fullName, form.email, form.phoneNumber, form.password); setLocation('/shop'); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to register'); } finally { setPending(false); } };
+  return <div className="auth-page"><div className="auth-card"><Brand /><span className="eyebrow"><span className="eyebrow-line" /> Community client account</span><h1>Register</h1><form onSubmit={submit} className="auth-form"><label>Full name<input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} required /></label><label>Email<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required autoComplete="email" /></label><label>Mobile number<input value={form.phoneNumber} onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })} required /></label><label>Password<input type="password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required autoComplete="new-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="button button-primary button-wide" disabled={pending}>{pending ? 'Registering…' : 'Register'}</button></form><p className="auth-switch">Already registered? <Link href="/sign-in">Sign in</Link></p></div></div>;
+}
+
+function WorkspaceRoute({ role, clientPage, children }: { role: Role; clientPage?: ReactNode; children: ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role === 'CLIENT' && clientPage) return clientPage;
+  return <RoleGate role={role}>{children}</RoleGate>;
+}
+
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/shop" component={ShopPage} /><Route path="/orders" component={OrdersPage} /><Route path="/deliveries" component={DeliveriesPage} /><Route path="/command" component={CommandPage} /><Route path="/pricing" component={PricingPage} /><Route path="/zones" component={ZonesPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <RoleGate role="client"><ShopPage /></RoleGate>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
+  return <WouterRouter base={basePath}><AuthProvider><QueryClientProvider client={queryClient}><TooltipProvider><Router /><Toaster /></TooltipProvider></QueryClientProvider></AuthProvider></WouterRouter>;
 }
 
 export default App;

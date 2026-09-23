@@ -6,6 +6,7 @@ import {
   serial,
   text,
   timestamp,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -20,9 +21,18 @@ export const hubsTable = pgTable("hubs", {
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   fullName: text("full_name").notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
   phoneNumber: text("phone_number").notNull(),
-  role: text("role").notNull(),
+  role: text("role").notNull().default("CLIENT"),
   hubId: integer("hub_id").references(() => hubsTable.id),
+});
+
+export const authSessionsTable = pgTable("auth_sessions", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const warehousesTable = pgTable("warehouses", {
@@ -71,6 +81,15 @@ export const hubsRelations = relations(hubsTable, ({ many }) => ({
   users: many(usersTable),
   warehouses: many(warehousesTable),
   orders: many(ordersTable),
+}));
+
+export const usersRelations = relations(usersTable, ({ many, one }) => ({
+  hub: one(hubsTable, { fields: [usersTable.hubId], references: [hubsTable.id] }),
+  sessions: many(authSessionsTable),
+}));
+
+export const authSessionsRelations = relations(authSessionsTable, ({ one }) => ({
+  user: one(usersTable, { fields: [authSessionsTable.userId], references: [usersTable.id] }),
 }));
 
 export const insertHubSchema = createInsertSchema(hubsTable).omit({ id: true });

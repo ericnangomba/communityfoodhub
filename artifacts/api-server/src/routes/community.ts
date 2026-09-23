@@ -45,6 +45,8 @@ type Order = {
   address: string;
   orderSource: string;
   status: string;
+  paymentMethod: string;
+  paymentStatus: string;
   totalAmount: number;
   itemCount: number;
   createdAt: string;
@@ -75,10 +77,31 @@ const zones = [
   { id: 4, name: "Athlone Ward 49", municipality: "City of Cape Town", hubName: "Southern Suburbs Hub", households: 1420, status: "READY" },
   { id: 5, name: "Khayelitsha Ward 91", municipality: "City of Cape Town", hubName: "Khayelitsha Hub", households: 1840, status: "ONBOARDING" },
   { id: 6, name: "Mfuleni Ward 109", municipality: "City of Cape Town", hubName: "Khayelitsha Hub", households: 1120, status: "ONBOARDING" },
+  { id: 7, name: "George Ward 8", municipality: "George Municipality", hubName: "Southern Suburbs Hub", households: 890, status: "READY" },
+  { id: 8, name: "Knysna Ward 6", municipality: "Knysna Municipality", hubName: "Southern Suburbs Hub", households: 680, status: "ONBOARDING" },
+  { id: 9, name: "Mossel Bay Ward 4", municipality: "Mossel Bay Municipality", hubName: "Southern Suburbs Hub", households: 720, status: "ONBOARDING" },
+  { id: 10, name: "Oudtshoorn Ward 7", municipality: "Oudtshoorn Municipality", hubName: "Southern Suburbs Hub", households: 610, status: "ONBOARDING" },
+  { id: 11, name: "Stellenbosch Ward 10", municipality: "Stellenbosch Municipality", hubName: "Southern Suburbs Hub", households: 1040, status: "READY" },
+  { id: 12, name: "Paarl Ward 4", municipality: "Drakenstein Municipality", hubName: "Southern Suburbs Hub", households: 980, status: "ONBOARDING" },
+  { id: 13, name: "Worcester Ward 11", municipality: "Breede Valley Municipality", hubName: "Southern Suburbs Hub", households: 760, status: "ONBOARDING" },
+  { id: 14, name: "Ceres Ward 3", municipality: "Witzenberg Municipality", hubName: "Southern Suburbs Hub", households: 440, status: "ONBOARDING" },
+  { id: 15, name: "Bredasdorp Ward 2", municipality: "Cape Agulhas Municipality", hubName: "Southern Suburbs Hub", households: 360, status: "ONBOARDING" },
+  { id: 16, name: "Hermanus Ward 8", municipality: "Overstrand Municipality", hubName: "Southern Suburbs Hub", households: 830, status: "READY" },
+  { id: 17, name: "Caledon Ward 5", municipality: "Theewaterskloof Municipality", hubName: "Southern Suburbs Hub", households: 570, status: "ONBOARDING" },
+  { id: 18, name: "Swellendam Ward 3", municipality: "Swellendam Municipality", hubName: "Southern Suburbs Hub", households: 390, status: "ONBOARDING" },
+  { id: 19, name: "Vredenburg Ward 7", municipality: "Saldanha Bay Municipality", hubName: "Elsies River Hub", households: 710, status: "ONBOARDING" },
+  { id: 20, name: "Malmesbury Ward 6", municipality: "Swartland Municipality", hubName: "Elsies River Hub", households: 690, status: "ONBOARDING" },
+  { id: 21, name: "Vredenburg Ward 2", municipality: "Bergrivier Municipality", hubName: "Elsies River Hub", households: 420, status: "ONBOARDING" },
+  { id: 22, name: "Clanwilliam Ward 4", municipality: "Cederberg Municipality", hubName: "Elsies River Hub", households: 310, status: "ONBOARDING" },
+  { id: 23, name: "Vredendal Ward 5", municipality: "Matzikama Municipality", hubName: "Elsies River Hub", households: 480, status: "ONBOARDING" },
+  { id: 24, name: "Beaufort West Ward 3", municipality: "Beaufort West Municipality", hubName: "Elsies River Hub", households: 350, status: "ONBOARDING" },
+  { id: 25, name: "Laingsburg Ward 1", municipality: "Laingsburg Municipality", hubName: "Elsies River Hub", households: 220, status: "ONBOARDING" },
+  { id: 26, name: "Prince Albert Ward 2", municipality: "Prince Albert Municipality", hubName: "Elsies River Hub", households: 180, status: "ONBOARDING" },
 ];
 
 let globalOffsetPercent = 8;
 let nextOrderId = 106;
+let nextDeliveryId = 4;
 
 const catalog: CatalogItem[] = [
   { id: 1, name: "Long Grain Rice", category: "Staples", packageSize: "1kg", communityPrice: 21.99, retailPrice: 25.99, savingsPercent: 15, stockQuantity: 138, imageKey: "rice", popular: true },
@@ -101,6 +124,8 @@ const orders: Order[] = [
     address: "Elsies River Block B, 14 3rd Avenue",
     orderSource: "WEB_APP",
     status: "WAREHOUSE_PACKING",
+    paymentMethod: "PAYMERCH",
+    paymentStatus: "PAID",
     totalAmount: 96.47,
     itemCount: 4,
     createdAt: "2026-09-18T08:14:00.000Z",
@@ -118,6 +143,8 @@ const orders: Order[] = [
     address: "Elsies River Zone 4, 8 Halt Road",
     orderSource: "WHATSAPP",
     status: "PENDING",
+    paymentMethod: "PAYSHAP",
+    paymentStatus: "PAID",
     totalAmount: 60.49,
     itemCount: 2,
     createdAt: "2026-09-18T08:46:00.000Z",
@@ -135,6 +162,8 @@ const orders: Order[] = [
     address: "Athlone, 22 Belgravia Road",
     orderSource: "WEB_APP",
     status: "DISPATCHED",
+    paymentMethod: "CARD",
+    paymentStatus: "PAID",
     totalAmount: 88.48,
     itemCount: 4,
     createdAt: "2026-09-18T07:32:00.000Z",
@@ -152,6 +181,8 @@ const orders: Order[] = [
     address: "Elsies River Block C, 10 Viking Way",
     orderSource: "WEB_APP",
     status: "DELIVERED",
+    paymentMethod: "EFT",
+    paymentStatus: "PAID",
     totalAmount: 55.48,
     itemCount: 3,
     createdAt: "2026-09-17T15:12:00.000Z",
@@ -203,6 +234,7 @@ function createOrder(input: {
   hubId: number;
   address: string;
   orderSource: string;
+  paymentMethod: string;
   lines: OrderLine[];
 }) {
   const hub = hubs.find((candidate) => candidate.id === input.hubId) ?? hubs[0];
@@ -215,6 +247,8 @@ function createOrder(input: {
     address: input.address,
     orderSource: input.orderSource,
     status: "PENDING",
+    paymentMethod: input.paymentMethod,
+    paymentStatus: "PAID",
     totalAmount: totalForLines(input.lines),
     itemCount: input.lines.reduce((count, line) => count + line.quantity, 0),
     createdAt: new Date().toISOString(),
@@ -234,6 +268,26 @@ function findCatalogItem(message: string) {
   if (normalized.includes("bread")) return catalog[4];
   if (normalized.includes("beans")) return catalog[5];
   return catalog[0];
+}
+
+function syncDeliveryQueue() {
+  for (const order of orders) {
+    const dispatchable = ["DISPATCHED", "OUT_FOR_DELIVERY", "READY_FOR_PICKUP"].includes(order.status);
+    const alreadyQueued = deliveries.some((delivery) => delivery.orderReference === order.reference);
+    if (dispatchable && !alreadyQueued) {
+      deliveries.unshift({
+        id: nextDeliveryId,
+        orderReference: order.reference,
+        agentName: "Unassigned agent",
+        agentInitials: "UA",
+        pickup: `${order.hubName} Warehouse`,
+        dropoff: order.address,
+        status: order.status === "OUT_FOR_DELIVERY" ? "OUT_FOR_DELIVERY" : "READY_FOR_PICKUP",
+        eta: "Assigning",
+      });
+      nextDeliveryId += 1;
+    }
+  }
 }
 
 const router: IRouter = Router();
@@ -283,6 +337,7 @@ router.patch("/orders/:orderId/status", (req, res) => {
     return;
   }
   order.status = input.status;
+  if (input.status === "OUT_FOR_DELIVERY" || input.status === "DISPATCHED" || input.status === "READY_FOR_PICKUP") syncDeliveryQueue();
   if (input.status === "DELIVERED") {
     const hub = hubs.find((candidate) => candidate.name === order.hubName);
     if (hub) hub.activeOrders = Math.max(0, hub.activeOrders - 1);
@@ -304,6 +359,7 @@ router.post("/whatsapp/orders", (req, res) => {
     hubId: 1,
     address,
     orderSource: "WHATSAPP",
+    paymentMethod: "PAYSHAP",
     lines: [{ itemName: item.name, packageSize: item.packageSize, quantity, unitPrice: item.communityPrice }],
   });
   req.log.info({ orderId: order.id }, "WhatsApp order parsed");
@@ -315,6 +371,7 @@ router.post("/whatsapp/orders", (req, res) => {
 });
 
 router.get("/deliveries", (_req, res) => {
+  syncDeliveryQueue();
   res.json(ListDeliveriesResponse.parse(deliveries));
 });
 

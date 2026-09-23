@@ -13,6 +13,7 @@ export interface OrderInput {
   hubId: number;
   address: string;
   orderSource: string;
+  paymentMethod: string;
   /** @minItems 1 */
   lines: OrderLine[];
 }

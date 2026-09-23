@@ -73,6 +73,8 @@ export interface Order {
   address: string;
   orderSource: string;
   status: string;
+  paymentMethod: string;
+  paymentStatus: string;
   totalAmount: number;
   itemCount: number;
   createdAt: string;
@@ -85,6 +87,7 @@ export interface OrderInput {
   hubId: number;
   address: string;
   orderSource: string;
+  paymentMethod: string;
   /** @minItems 1 */
   lines: OrderLine[];
 }
