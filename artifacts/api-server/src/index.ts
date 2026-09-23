@@ -16,6 +16,11 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+logger.info({
+  hasSuperAdminEmail: Boolean(process.env.SUPER_ADMIN_EMAIL),
+  hasSuperAdminPassword: Boolean(process.env.SUPER_ADMIN_PASSWORD),
+}, "Super admin configuration loaded");
+
 ensureConfiguredSuperAdmin()
   .catch((error) => logger.error({ error }, "Unable to initialize the configured super admin"))
   .finally(() => {

@@ -7,6 +7,7 @@ import {
   AppRole,
   createSession,
   deleteSession,
+  ensureConfiguredSuperAdmin,
   findUserByEmail,
   hashPassword,
   requireAuth,
@@ -37,7 +38,14 @@ function cookieOptions(expires: Date) {
   };
 }
 
-router.get("/auth/me", requireAuth, (req, res) => {
+router.get("/auth/me", async (req, res, next) => {
+  try {
+    await ensureConfiguredSuperAdmin();
+    requireAuth(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+}, (req, res) => {
   res.json({ user: req.authUser });
 });
 
@@ -65,6 +73,7 @@ router.post("/auth/register", async (req, res, next) => {
 
 router.post("/auth/login", async (req, res, next) => {
   try {
+    await ensureConfiguredSuperAdmin();
     const input = credentials.parse(req.body);
     const user = await findUserByEmail(input.email);
     if (!user || !verifyPassword(input.password, user.passwordHash)) {
