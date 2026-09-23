@@ -1,0 +1,1 @@
+- [Secret-backed admin provisioning](super-admin-secrets.md) — restart the API after changing Super Admin secrets so the database account is reconciled.
