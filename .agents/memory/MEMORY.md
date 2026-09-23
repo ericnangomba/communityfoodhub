@@ -1,1 +1,2 @@
 - [Secret-backed admin provisioning](super-admin-secrets.md) — restart the API after changing Super Admin secrets so the database account is reconciled.
+- [Auth regression runner](auth-regression-testing.md) — critical role-gated browser flows have a checked-in Chromium harness when interactive testing is unavailable.

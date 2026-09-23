@@ -93,8 +93,8 @@ type AccessUser = Pick<AuthUser, 'id' | 'fullName' | 'email' | 'phoneNumber' | '
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  register: (fullName: string, email: string, phoneNumber: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<AuthUser>;
+  register: (fullName: string, email: string, phoneNumber: string, password: string) => Promise<AuthUser>;
   signOut: () => Promise<void>;
 };
 
@@ -120,8 +120,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextValue = {
     user,
     loading,
-    signIn: async (email, password) => { const payload = await authRequest('login', { method: 'POST', body: JSON.stringify({ email, password }) }); setUser(payload.user ?? null); },
-    register: async (fullName, email, phoneNumber, password) => { const payload = await authRequest('register', { method: 'POST', body: JSON.stringify({ fullName, email, phoneNumber, password }) }); setUser(payload.user ?? null); },
+    signIn: async (email, password) => { const payload = await authRequest('login', { method: 'POST', body: JSON.stringify({ email, password }) }); if (!payload.user) throw new Error('Authentication response did not include a user'); setUser(payload.user); return payload.user; },
+    register: async (fullName, email, phoneNumber, password) => { const payload = await authRequest('register', { method: 'POST', body: JSON.stringify({ fullName, email, phoneNumber, password }) }); if (!payload.user) throw new Error('Registration response did not include a user'); setUser(payload.user); return payload.user; },
     signOut: async () => { await authRequest('logout', { method: 'POST' }).catch(() => undefined); setUser(null); },
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -164,6 +164,10 @@ function setIntendedRole(role: Role) {
 function intendedRole(): Role {
   const role = window.sessionStorage.getItem('cwh-intended-role');
   return role === 'super' || role === 'hub' || role === 'agent' ? role : 'client';
+}
+
+function workspacePath(role: AuthRole) {
+  return role === 'SUPER_ADMIN' ? '/command' : role === 'HUB_ADMIN' ? '/orders' : role === 'DELIVERY_AGENT' ? '/deliveries' : '/shop';
 }
 
 function money(value: number) {
@@ -488,7 +492,7 @@ function RoleGate({ role, children }: { role: Role; children: ReactNode }) {
   }
   const normalizedRole = user.role === 'SUPER_ADMIN' ? 'super' : user.role === 'HUB_ADMIN' ? 'hub' : user.role === 'DELIVERY_AGENT' ? 'agent' : 'client';
   if (normalizedRole !== role) {
-    setLocation(normalizedRole === 'client' ? '/shop' : normalizedRole === 'hub' ? '/orders' : normalizedRole === 'agent' ? '/deliveries' : '/command');
+    setLocation(workspacePath(user.role));
     return null;
   }
   return children;
@@ -517,7 +521,7 @@ function SignInPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setPending(true); try { await signIn(email, password); const role = email.toLowerCase() === 'admin@comhub.co.za' ? 'command' : 'shop'; setLocation(`/${role}`); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to sign in'); } finally { setPending(false); } };
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setPending(true); try { const signedInUser = await signIn(email, password); setLocation(workspacePath(signedInUser.role)); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to sign in'); } finally { setPending(false); } };
   return <div className="auth-page"><div className="auth-card"><Brand /><span className="eyebrow"><span className="eyebrow-line" /> Community Wealth Hub</span><h1>Sign in</h1><form onSubmit={submit} className="auth-form"><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="button button-primary button-wide" disabled={pending}>{pending ? 'Signing in…' : 'Sign in'}</button></form><p className="auth-switch">Need a community account? <Link href="/sign-up">Register</Link></p></div></div>;
 }
 
