@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import {
@@ -234,6 +234,7 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const { user, signOut } = useAuth();
   const currentRole = roles.find((item) => item.id === role) ?? roles[3];
   const isClient = user?.role === 'CLIENT';
@@ -244,6 +245,36 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
       { href: '/deliveries', label: 'Delivery status', icon: Bike, role: 'client' as Role },
     ] }]
     : navGroups.filter((group) => group.items.some((item) => item.role === role));
+
+  // Mobile bottom navigation items
+  const bottomNavItems = isClient
+    ? [
+        { href: '/shop', label: 'Shop', icon: ShoppingBasket },
+        { href: '/orders', label: 'Orders', icon: Package },
+        { href: '/deliveries', label: 'Deliveries', icon: Bike },
+      ]
+    : role === 'hub'
+    ? [
+        { href: '/orders', label: 'Orders', icon: Package },
+        { href: '/deliveries', label: 'Deliveries', icon: Bike },
+      ]
+    : role === 'agent'
+    ? [
+        { href: '/deliveries', label: 'Deliveries', icon: Bike },
+      ]
+    : [
+        { href: '/command', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/pricing', label: 'Pricing', icon: SlidersHorizontal },
+        { href: '/zones', label: 'Zones', icon: MapPin },
+      ];
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
       <div className="sidebar-head"><Brand compact /><button className="icon-button sidebar-close" onClick={() => setMobileOpen(false)} data-testid="button-close-menu"><X size={18} /></button></div>
@@ -271,6 +302,20 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
       {noticeOpen && <div className="notice-popover" data-testid="notice-popover"><b>Network is moving well.</b><span>No new alerts for this workspace.</span></div>}
       <div className="page-wrap">{children}</div>
     </main>
+    {isMobile && (
+      <nav className="bottom-nav">
+        {bottomNavItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`bottom-nav-item ${location === item.href ? 'active' : ''}`}
+          >
+            <item.icon size={24} />
+            <span>{item.label}</span>
+          </Link>
+        ))}
+      </nav>
+    )}
   </div>;
 }
 

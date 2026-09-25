@@ -1,0 +1,46 @@
+{
+  "name": "Community Wealth Hub",
+  "short_name": "Community Hub",
+  "description": "Connect households, local hubs and delivery teams for better access to fair-priced food in your neighborhood.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e8e8e8",
+  "theme_color": "#158 41% 26%",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "shopping", "community"],
+  "shortcuts": [
+    {
+      "name": "Shop Food",
+      "short_name": "Shop",
+      "description": "Browse and order food items",
+      "url": "/shop",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "sizes": "any"
+        }
+      ]
+    },
+    {
+      "name": "My Orders",
+      "short_name": "Orders",
+      "description": "View your order status",
+      "url": "/orders",
+      "icons": [
+        {
+          "src": "/favicon.svg",
+          "sizes": "any"
+        }
+      ]
+    }
+  ]
+}
