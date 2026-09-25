@@ -108,7 +108,9 @@ function useAuth() {
 }
 
 async function authRequest(path: string, options?: RequestInit) {
-  const response = await fetch(`/api/auth/${path}`, { ...options, credentials: 'include', headers: { 'content-type': 'application/json', ...(options?.headers ?? {}) } });
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const url = apiUrl ? `${apiUrl}/api/auth/${path}` : `/api/auth/${path}`;
+  const response = await fetch(url, { ...options, credentials: apiUrl ? 'include' : 'include', headers: { 'content-type': 'application/json', ...(options?.headers ?? {}) } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error ?? 'Authentication request failed');
   return payload as { user?: AuthUser };

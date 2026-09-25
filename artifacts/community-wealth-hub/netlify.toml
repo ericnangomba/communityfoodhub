@@ -57,8 +57,10 @@
   NODE_ENV = "production"
   BASE_PATH = "/"
   BASE_URL = "/"
+  VITE_API_URL = ""
 
 [context.deploy-preview.environment]
   NODE_ENV = "development"
   BASE_PATH = "/"
   BASE_URL = "/"
+  VITE_API_URL = ""
