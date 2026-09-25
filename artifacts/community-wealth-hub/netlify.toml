@@ -34,10 +34,7 @@
 
 [context.production.environment]
   NODE_ENV = "production"
+  BASE_URL = "https://communityfoodhub.netlify.app"
 
 [context.deploy-preview.environment]
   NODE_ENV = "development"
-
-[context.production]
-  [context.production.environment]
-    BASE_URL = "https://communityfoodhub.netlify.app"
