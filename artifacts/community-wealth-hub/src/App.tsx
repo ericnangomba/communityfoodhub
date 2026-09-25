@@ -84,7 +84,7 @@ import paymerchLogo from '@assets/mlogopaymerch_1789737270045.png';
 import './index.css';
 
 const queryClient = new QueryClient();
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 
 type Role = 'client' | 'hub' | 'agent' | 'super';
 type AuthRole = 'CLIENT' | 'HUB_ADMIN' | 'DELIVERY_AGENT' | 'SUPER_ADMIN';
