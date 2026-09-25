@@ -79,6 +79,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import logoSvg from '@assets/onsekombuislogosvg.svg';
 import paymerchLogo from '@assets/mlogopaymerch_1789737270045.png';
 import './index.css';
 
@@ -219,10 +220,13 @@ function QueryState({ loading, error, empty, children, onRetry }: { loading: boo
   return children;
 }
 
-function Brand({ compact = false }: { compact?: boolean }) {
+function Brand({ compact = false, showWordmark = true }: { compact?: boolean; showWordmark?: boolean }) {
   return <Link href="/" className={`brand ${compact ? 'compact' : ''}`} data-testid="link-brand">
-    <span className="brand-mark"><Leaf size={18} strokeWidth={2.5} /></span>
-    <span><b>Community</b><em>Wealth Hub</em></span>
+    <img src={logoSvg} alt="Community Food Hub logo" className="brand-logo" />
+    {showWordmark && <span className="brand-wordmark">
+      <span className="brand-kicker"><span className="eyebrow-line" /> Community</span>
+      <em>Food Hub</em>
+    </span>}
   </Link>;
 }
 
@@ -276,12 +280,11 @@ function Home() {
   const health = useHealthCheck({ query: { queryKey: getHealthCheckQueryKey(), retry: 1 } });
   return <div className="entry-page">
     <div className="entry-noise" />
-    <header className="entry-nav"><Brand /><div className="entry-status"><span className="live-pulse" /> Network online {health.isLoading ? '' : health.isError ? '· offline check' : '· Elsies River'}</div></header>
+    <header className="entry-nav"><Brand showWordmark={false} /><div className="entry-status"><span className="live-pulse" /> Network online {health.isLoading ? '' : health.isError ? '· offline check' : '· Elsies River'}</div></header>
     <div className="entry-grid">
       <section className="entry-copy">
-        <div className="eyebrow"><span className="eyebrow-line" /> A neighborhood utility</div>
          <h1>Wealth that stays <i>in the community.</i></h1>
-        <p className="entry-lede">Community Wealth Hub connects Elsies River households, local hubs and delivery teams around one simple promise: better access, with more value kept close to home.</p>
+        <p className="entry-lede">Community Food Hub connects Elsies River households, local hubs and delivery teams around one simple promise: better access, with more value kept close to home.</p>
         <div className="entry-stats"><div><strong>04</strong><span>active hubs</span></div><div><strong>1,240</strong><span>households reached</span></div><div><strong>18.6%</strong><span>value retained locally</span></div></div>
       </section>
       <section className="role-card">
@@ -522,7 +525,7 @@ function SignInPage() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setPending(true); try { const signedInUser = await signIn(email, password); setLocation(workspacePath(signedInUser.role)); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to sign in'); } finally { setPending(false); } };
-  return <div className="auth-page"><div className="auth-card"><Brand /><span className="eyebrow"><span className="eyebrow-line" /> Community Wealth Hub</span><h1>Sign in</h1><form onSubmit={submit} className="auth-form"><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="button button-primary button-wide" disabled={pending}>{pending ? 'Signing in…' : 'Sign in'}</button></form><p className="auth-switch">Need a community account? <Link href="/sign-up">Register</Link></p></div></div>;
+  return <div className="auth-page"><div className="auth-card"><Brand /><h1>Sign in</h1><form onSubmit={submit} className="auth-form"><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="button button-primary button-wide" disabled={pending}>{pending ? 'Signing in…' : 'Sign in'}</button></form><p className="auth-switch">Need a community account? <Link href="/sign-up">Register</Link></p></div></div>;
 }
 
 function SignUpPage() {
@@ -532,7 +535,7 @@ function SignUpPage() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setPending(true); try { await register(form.fullName, form.email, form.phoneNumber, form.password); setLocation('/shop'); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to register'); } finally { setPending(false); } };
-  return <div className="auth-page"><div className="auth-card"><Brand /><span className="eyebrow"><span className="eyebrow-line" /> Community client account</span><h1>Register</h1><form onSubmit={submit} className="auth-form"><label>Full name<input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} required /></label><label>Email<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required autoComplete="email" /></label><label>Mobile number<input value={form.phoneNumber} onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })} required /></label><label>Password<input type="password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required autoComplete="new-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="button button-primary button-wide" disabled={pending}>{pending ? 'Registering…' : 'Register'}</button></form><p className="auth-switch">Already registered? <Link href="/sign-in">Sign in</Link></p></div></div>;
+  return <div className="auth-page"><div className="auth-card"><Brand /><h1>Register</h1><form onSubmit={submit} className="auth-form"><label>Full name<input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} required /></label><label>Email<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required autoComplete="email" /></label><label>Mobile number<input value={form.phoneNumber} onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })} required /></label><label>Password<input type="password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required autoComplete="new-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="button button-primary button-wide" disabled={pending}>{pending ? 'Registering…' : 'Register'}</button></form><p className="auth-switch">Already registered? <Link href="/sign-in">Sign in</Link></p></div></div>;
 }
 
 function WorkspaceRoute({ role, clientPage, children }: { role: Role; clientPage?: ReactNode; children: ReactNode }) {

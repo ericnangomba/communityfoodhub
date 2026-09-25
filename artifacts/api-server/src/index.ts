@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureConfiguredSuperAdmin } from "./lib/auth";
+import { ensureDatabaseSchema } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -21,7 +22,8 @@ logger.info({
   hasSuperAdminPassword: Boolean(process.env.SUPER_ADMIN_PASSWORD),
 }, "Super admin configuration loaded");
 
-ensureConfiguredSuperAdmin()
+ensureDatabaseSchema()
+  .then(() => ensureConfiguredSuperAdmin())
   .catch((error) => logger.error({ error }, "Unable to initialize the configured super admin"))
   .finally(() => {
     app.listen(port, (err) => {

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev": "node -e \"const { spawnSync } = require('node:child_process'); const env = { ...process.env, NODE_ENV: 'development' }; for (const step of ['build', 'start']) { const result = spawnSync('pnpm', ['run', step], { stdio: 'inherit', shell: true, env }); if (result.status !== 0) process.exit(result.status ?? 1); }\"",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
