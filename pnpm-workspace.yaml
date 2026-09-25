@@ -1,5 +1,6 @@
 packages:
-  - artifacts/*
+  - artifacts/community-wealth-hub
+  - artifacts/api-server
   - lib/*
   - lib/integrations/*
   - scripts
