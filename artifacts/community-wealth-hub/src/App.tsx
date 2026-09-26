@@ -113,34 +113,42 @@ async function authRequest(path: string, options?: RequestInit) {
   
   // If no API URL is configured, use demo mode
   if (!apiUrl) {
+    console.log('Demo mode: Using fallback authentication for', path);
     if (path === 'me') {
       return { user: null };
     }
     if (path === 'login') {
       try {
         const body = JSON.parse(options?.body as string || '{}');
+        console.log('Demo login attempt:', body.email);
         if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
           return { user: { id: 1, name: 'Super Admin', fullName: 'Super Admin', email: body.email, phoneNumber: '', role: 'SUPER_ADMIN' as AuthRole, hubId: null } };
         }
         throw new Error('Email or password is incorrect');
       } catch (e) {
+        console.error('Demo login error:', e);
         throw new Error('Invalid request');
       }
     }
     if (path === 'register') {
       try {
         const body = JSON.parse(options?.body as string || '{}');
+        console.log('Demo register attempt:', body.email);
         return { user: { id: Math.floor(Math.random() * 1000), name: body.fullName, fullName: body.fullName, email: body.email, phoneNumber: body.phoneNumber, role: 'CLIENT' as AuthRole, hubId: null } };
       } catch (e) {
+        console.error('Demo register error:', e);
         throw new Error('Invalid request');
       }
     }
     if (path === 'logout') {
+      console.log('Demo logout');
       return {};
     }
+    console.error('Unknown auth path:', path);
     throw new Error('Authentication request failed');
   }
   
+  console.log('API mode: Fetching from', url);
   const response = await fetch(url, { ...options, credentials: apiUrl ? 'include' : 'include', headers: { 'content-type': 'application/json', ...(options?.headers ?? {}) } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error ?? 'Authentication request failed');
