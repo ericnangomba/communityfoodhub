@@ -110,6 +110,29 @@ function useAuth() {
 async function authRequest(path: string, options?: RequestInit) {
   const apiUrl = import.meta.env.VITE_API_URL || '';
   const url = apiUrl ? `${apiUrl}/api/auth/${path}` : `/api/auth/${path}`;
+  
+  // If no API URL is configured, use demo mode
+  if (!apiUrl) {
+    if (path === 'me') {
+      return { user: null };
+    }
+    if (path === 'login') {
+      const body = JSON.parse(options?.body as string || '{}');
+      if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
+        return { user: { id: 1, name: 'Super Admin', fullName: 'Super Admin', email: body.email, phoneNumber: '', role: 'SUPER_ADMIN', hubId: null } };
+      }
+      throw new Error('Email or password is incorrect');
+    }
+    if (path === 'register') {
+      const body = JSON.parse(options?.body as string || '{}');
+      return { user: { id: Math.floor(Math.random() * 1000), name: body.fullName, fullName: body.fullName, email: body.email, phoneNumber: body.phoneNumber, role: 'CLIENT', hubId: null } };
+    }
+    if (path === 'logout') {
+      return {};
+    }
+    throw new Error('Authentication request failed');
+  }
+  
   const response = await fetch(url, { ...options, credentials: apiUrl ? 'include' : 'include', headers: { 'content-type': 'application/json', ...(options?.headers ?? {}) } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error ?? 'Authentication request failed');
