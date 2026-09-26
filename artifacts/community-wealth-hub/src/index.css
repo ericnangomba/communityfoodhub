@@ -1,4 +1,12 @@
+/* Import fonts with fallback */
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+/* Add system font fallback */
+@font-face {
+  font-family: 'System';
+  src: local('Arial'), local('Helvetica'), local('sans-serif');
+}
+
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";

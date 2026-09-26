@@ -37,25 +37,69 @@ function toError(value: unknown): Error {
 
 function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 p-6">
-      <div className="max-w-lg w-full text-center">
-        <h1 className="text-xl font-semibold text-gray-900">
+    <div style={{
+      minHeight: '100vh',
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#f5f5f5',
+      padding: '20px',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      zIndex: 9999
+    }}>
+      <div style={{
+        maxWidth: '500px',
+        width: '100%',
+        textAlign: 'center',
+        backgroundColor: 'white',
+        padding: '30px',
+        borderRadius: '12px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+      }}>
+        <h1 style={{
+          fontSize: '24px',
+          fontWeight: '600',
+          color: '#333',
+          marginBottom: '12px'
+        }}>
           Something went wrong
         </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          This part of the app hit an error. The rest of the app is still
-          running.
+        <p style={{
+          fontSize: '14px',
+          color: '#666',
+          marginBottom: '16px'
+        }}>
+          This part of the app hit an error. The rest of the app is still running.
         </p>
-        {/* Dev only: messages can carry API responses and other internals. */}
-        {import.meta.env.DEV ? (
-          <pre className="mt-4 overflow-x-auto rounded bg-gray-100 p-3 text-left text-xs text-gray-800">
-            {error.message || String(error)}
-          </pre>
-        ) : null}
+        <pre style={{
+          marginTop: '16px',
+          overflow: 'auto',
+          borderRadius: '8px',
+          backgroundColor: '#f0f0f0',
+          padding: '12px',
+          textAlign: 'left',
+          fontSize: '12px',
+          color: '#333',
+          maxHeight: '200px'
+        }}>
+          {error.message || String(error)}
+        </pre>
         <button
           type="button"
           onClick={resetError}
-          className="mt-4 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700"
+          style={{
+            marginTop: '16px',
+            borderRadius: '8px',
+            backgroundColor: '#2a5a4e',
+            padding: '12px 24px',
+            fontSize: '14px',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer'
+          }}
         >
           Try again
         </button>
@@ -75,11 +119,20 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
+    const errorObj = toError(error);
     console.error(
       'ErrorBoundary caught an error:',
-      toError(error),
+      errorObj,
       info.componentStack,
     );
+    // Also display error on page for debugging
+    if (typeof window !== 'undefined') {
+      (window as any).__lastError = {
+        error: errorObj.message,
+        stack: errorObj.stack,
+        componentStack: info.componentStack
+      };
+    }
   }
 
   componentDidUpdate(prevProps: ErrorBoundaryProps): void {
