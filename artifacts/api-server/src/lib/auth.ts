@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { and, eq, gt } from "drizzle-orm";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
@@ -9,6 +10,7 @@ export type AppRole = "CLIENT" | "HUB_ADMIN" | "DELIVERY_AGENT" | "SUPER_ADMIN";
 
 export type AuthUser = {
   id: number;
+  name?: string;
   fullName: string;
   email: string;
   phoneNumber: string;
@@ -40,6 +42,7 @@ function configureDemoAuth() {
   }
   fallbackUsers.set(email, {
     id: fallbackUserId++,
+    name: "Community Wealth Super Admin",
     fullName: "Community Wealth Super Admin",
     email,
     phoneNumber: "",
@@ -63,6 +66,12 @@ export function hashPassword(password: string) {
 }
 
 export function verifyPassword(password: string, storedHash: string) {
+  // Handle bcrypt hashes (start with $2a$, $2b$, $2y$)
+  if (storedHash.startsWith('$2')) {
+    return bcrypt.compare(password, storedHash);
+  }
+  
+  // Handle scrypt hashes (format: salt:derivedKey)
   const [salt, key] = storedHash.split(":");
   if (!salt || !key) return false;
   const expected = Buffer.from(key, "hex");
@@ -70,9 +79,10 @@ export function verifyPassword(password: string, storedHash: string) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-function publicUser(user: Partial<AuthUser> & { id: number; fullName?: string; email?: string; phoneNumber?: string; role?: AppRole; hubId?: number | null }): AuthUser {
+function publicUser(user: Partial<AuthUser> & { id: number; name?: string; fullName?: string; email?: string; phoneNumber?: string; role?: AppRole; hubId?: number | null }): AuthUser {
   return {
     id: user.id,
+    name: user.name,
     fullName: user.fullName ?? "",
     email: user.email ?? "",
     phoneNumber: user.phoneNumber ?? "",
@@ -109,6 +119,7 @@ export async function ensureConfiguredSuperAdmin() {
     return;
   }
   await (dbHandle.db.insert(dbHandle.usersTable) as any).values({
+    name: "Community Wealth Super Admin",
     fullName: "Community Wealth Super Admin",
     email,
     passwordHash: hashPassword(password),

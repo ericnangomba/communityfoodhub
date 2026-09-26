@@ -88,8 +88,8 @@ const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 
 type Role = 'client' | 'hub' | 'agent' | 'super';
 type AuthRole = 'CLIENT' | 'HUB_ADMIN' | 'DELIVERY_AGENT' | 'SUPER_ADMIN';
-type AuthUser = { id: number; fullName: string; email: string; phoneNumber: string; role: AuthRole; hubId: number | null };
-type AccessUser = Pick<AuthUser, 'id' | 'fullName' | 'email' | 'phoneNumber' | 'role' | 'hubId'>;
+type AuthUser = { id: number; name?: string; fullName: string | null; email: string; phoneNumber: string | null; role: AuthRole; hubId: number | null };
+type AccessUser = Pick<AuthUser, 'id' | 'name' | 'fullName' | 'email' | 'phoneNumber' | 'role' | 'hubId'>;
 
 type AuthContextValue = {
   user: AuthUser | null;

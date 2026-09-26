@@ -13,7 +13,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH || import.meta.env.BASE_URL || '/';
+const basePath = (process.env.BASE_PATH || (import.meta.env?.BASE_URL || '/')).replace(/\/$/, '');
 
 export default defineConfig({
   base: basePath,

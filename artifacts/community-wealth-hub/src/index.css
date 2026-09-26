@@ -647,6 +647,17 @@
     padding: 12px 16px;
   }
 
+  /* Center logo on mobile */
+  .brand {
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 auto;
+  }
+
+  .brand-logo {
+    margin: 0 auto;
+  }
+
   .category-tabs {
     flex-wrap: wrap;
     gap: 8px;

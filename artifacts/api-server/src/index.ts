@@ -1,11 +1,10 @@
+import 'dotenv/config';
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureConfiguredSuperAdmin } from "./lib/auth";
 import { ensureDatabaseSchema } from "@workspace/db";
 
 const rawPort = process.env["PORT"] || "3000";
-
-const port = Number(rawPort);
 
 const port = Number(rawPort);
 

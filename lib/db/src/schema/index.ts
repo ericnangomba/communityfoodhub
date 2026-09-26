@@ -20,12 +20,15 @@ export const hubsTable = pgTable("hubs", {
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
-  fullName: text("full_name").notNull(),
+  name: text("name"),
+  fullName: text("full_name"),
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
-  phoneNumber: text("phone_number").notNull(),
+  phoneNumber: text("phone_number"),
   role: text("role").notNull().default("CLIENT"),
   hubId: integer("hub_id").references(() => hubsTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
 });
 
 export const authSessionsTable = pgTable("auth_sessions", {

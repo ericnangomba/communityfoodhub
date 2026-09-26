@@ -6,6 +6,7 @@ packages:
   - scripts
 
 allowBuilds:
+  bcrypt: set this to true or false
   esbuild: true
 
 autoInstallPeers: false

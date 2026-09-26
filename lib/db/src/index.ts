@@ -72,12 +72,15 @@ export async function ensureDatabaseSchema() {
 
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        full_name TEXT NOT NULL,
+        name TEXT,
+        full_name TEXT,
         email VARCHAR(255) NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
-        phone_number TEXT NOT NULL,
+        phone_number TEXT,
         role TEXT NOT NULL DEFAULT 'CLIENT',
-        hub_id INTEGER REFERENCES hubs(id)
+        hub_id INTEGER REFERENCES hubs(id),
+        created_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ
       );
 
       CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -131,12 +134,15 @@ export async function ensureDatabaseSchema() {
         ["status", "TEXT DEFAULT 'ACTIVE'"],
       ],
       users: [
+        ["name", "TEXT"],
         ["full_name", "TEXT"],
         ["email", "VARCHAR(255)"],
         ["password_hash", "TEXT"],
         ["phone_number", "TEXT"],
         ["role", "TEXT DEFAULT 'CLIENT'"],
         ["hub_id", "INTEGER"],
+        ["created_at", "TIMESTAMPTZ"],
+        ["updated_at", "TIMESTAMPTZ"],
       ],
       auth_sessions: [
         ["id", "TEXT"],
