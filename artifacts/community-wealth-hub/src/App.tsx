@@ -117,15 +117,23 @@ async function authRequest(path: string, options?: RequestInit) {
       return { user: null };
     }
     if (path === 'login') {
-      const body = JSON.parse(options?.body as string || '{}');
-      if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
-        return { user: { id: 1, name: 'Super Admin', fullName: 'Super Admin', email: body.email, phoneNumber: '', role: 'SUPER_ADMIN', hubId: null } };
+      try {
+        const body = JSON.parse(options?.body as string || '{}');
+        if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
+          return { user: { id: 1, name: 'Super Admin', fullName: 'Super Admin', email: body.email, phoneNumber: '', role: 'SUPER_ADMIN', hubId: null } };
+        }
+        throw new Error('Email or password is incorrect');
+      } catch (e) {
+        throw new Error('Invalid request');
       }
-      throw new Error('Email or password is incorrect');
     }
     if (path === 'register') {
-      const body = JSON.parse(options?.body as string || '{}');
-      return { user: { id: Math.floor(Math.random() * 1000), name: body.fullName, fullName: body.fullName, email: body.email, phoneNumber: body.phoneNumber, role: 'CLIENT', hubId: null } };
+      try {
+        const body = JSON.parse(options?.body as string || '{}');
+        return { user: { id: Math.floor(Math.random() * 1000), name: body.fullName, fullName: body.fullName, email: body.email, phoneNumber: body.phoneNumber, role: 'CLIENT', hubId: null } };
+      } catch (e) {
+        throw new Error('Invalid request');
+      }
     }
     if (path === 'logout') {
       return {};
