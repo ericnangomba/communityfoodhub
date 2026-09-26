@@ -120,7 +120,7 @@ async function authRequest(path: string, options?: RequestInit) {
       try {
         const body = JSON.parse(options?.body as string || '{}');
         if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
-          return { user: { id: 1, name: 'Super Admin', fullName: 'Super Admin', email: body.email, phoneNumber: '', role: 'SUPER_ADMIN', hubId: null } };
+          return { user: { id: 1, name: 'Super Admin', fullName: 'Super Admin', email: body.email, phoneNumber: '', role: 'SUPER_ADMIN' as AuthRole, hubId: null } };
         }
         throw new Error('Email or password is incorrect');
       } catch (e) {
@@ -130,7 +130,7 @@ async function authRequest(path: string, options?: RequestInit) {
     if (path === 'register') {
       try {
         const body = JSON.parse(options?.body as string || '{}');
-        return { user: { id: Math.floor(Math.random() * 1000), name: body.fullName, fullName: body.fullName, email: body.email, phoneNumber: body.phoneNumber, role: 'CLIENT', hubId: null } };
+        return { user: { id: Math.floor(Math.random() * 1000), name: body.fullName, fullName: body.fullName, email: body.email, phoneNumber: body.phoneNumber, role: 'CLIENT' as AuthRole, hubId: null } };
       } catch (e) {
         throw new Error('Invalid request');
       }
