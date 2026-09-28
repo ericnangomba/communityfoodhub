@@ -451,22 +451,6 @@ html, body {
   opacity: 1 !important;
 }
 
-/* Force all elements to be visible */
-* {
-  visibility: visible !important;
-}
-
-/* But hide script and style tags */
-script, style, head, meta, link {
-  visibility: hidden !important;
-}
-
-/* Make body and html visible */
-html, body {
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
 /* Mobile-first centered layout */
 @media (max-width: 768px) {
   .app-shell {
