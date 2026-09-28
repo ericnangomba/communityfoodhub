@@ -3,8 +3,8 @@ services:
     name: community-wealth-hub-api
     runtime: node
     plan: free
-    buildCommand: pnpm install && pnpm run build
-    startCommand: pnpm run start
+    buildCommand: cd artifacts/api-server && pnpm install && pnpm run build
+    startCommand: cd artifacts/api-server && pnpm run start
     envVars:
       - key: PORT
         value: 3002
