@@ -81,10 +81,10 @@
   NODE_ENV = "production"
   BASE_PATH = "/"
   BASE_URL = "/"
-  VITE_API_URL = ""
+  VITE_API_URL = "https://your-api-server-url.com"
 
 [context.deploy-preview.environment]
   NODE_ENV = "development"
   BASE_PATH = "/"
   BASE_URL = "/"
-  VITE_API_URL = ""
+  VITE_API_URL = "https://your-api-server-url.com"

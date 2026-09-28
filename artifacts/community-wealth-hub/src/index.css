@@ -566,6 +566,22 @@ html, body {
   .role-card {
     max-width: 100%;
   }
+
+  /* Center logo on mobile */
+  .brand {
+    justify-content: center;
+    align-items: center;
+  }
+
+  .brand-logo {
+    transform: translateY(0) !important;
+  }
+
+  /* Optimize loading state on mobile */
+  #root > div {
+    justify-content: center !important;
+    align-items: center !important;
+  }
 }
 
 .sidebar { width: 246px; flex: 0 0 246px; min-height: 100dvh; background: hsl(var(--sidebar)); color: hsl(var(--sidebar-foreground)); display: flex; flex-direction: column; padding: 24px 16px 16px; position: sticky; top: 0; }

@@ -121,10 +121,17 @@ async function authRequest(path: string, options?: RequestInit) {
       try {
         const body = JSON.parse(options?.body as string || '{}');
         console.log('Demo login attempt:', body.email);
-        if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
-          return { user: { id: 1, name: 'Super Admin', fullName: 'Super Admin', email: body.email, phoneNumber: '', role: 'SUPER_ADMIN' as AuthRole, hubId: null } };
-        }
-        throw new Error('Email or password is incorrect');
+        // Allow any email/password for demo mode
+        const isAdmin = body.email === 'admin@comhub.co.za';
+        return { user: { 
+          id: 1, 
+          name: isAdmin ? 'Super Admin' : body.email.split('@')[0], 
+          fullName: isAdmin ? 'Super Admin' : body.email.split('@')[0], 
+          email: body.email, 
+          phoneNumber: '', 
+          role: isAdmin ? 'SUPER_ADMIN' as AuthRole : 'CLIENT' as AuthRole, 
+          hubId: null 
+        } };
       } catch (e) {
         console.error('Demo login error:', e);
         throw new Error('Invalid request');

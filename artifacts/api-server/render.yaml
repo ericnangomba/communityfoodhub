@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: community-wealth-hub-api
+    runtime: node
+    plan: free
+    buildCommand: pnpm install && pnpm run build
+    startCommand: pnpm run start
+    envVars:
+      - key: PORT
+        value: 3002
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPER_ADMIN_EMAIL
+        sync: false
+      - key: SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: NEON_AUTH_URL
+        sync: false
+      - key: NEON_JWKS_URL
+        sync: false
