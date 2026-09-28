@@ -89,6 +89,50 @@ const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 type Role = 'client' | 'hub' | 'agent' | 'super';
 type AuthRole = 'CLIENT' | 'HUB_ADMIN' | 'DELIVERY_AGENT' | 'SUPER_ADMIN';
 type AuthUser = { id: number; name?: string; fullName: string | null; email: string; phoneNumber: string | null; role: AuthRole; hubId: number | null };
+type DemoUser = { id: number; email: string; password: string; fullName: string; role: AuthRole; phoneNumber: string };
+
+// Simple in-memory user store for prototyping
+const DEMO_USERS_KEY = 'cwh-demo-users';
+const DEMO_SESSION_KEY = 'cwh-demo-session';
+
+function getDemoUsers(): DemoUser[] {
+  if (typeof window === 'undefined') return [];
+  const stored = localStorage.getItem(DEMO_USERS_KEY);
+  if (!stored) {
+    // Initialize with default users
+    const defaultUsers: DemoUser[] = [
+      { id: 1, email: 'admin@comhub.co.za', password: 'Kamphata@2023', fullName: 'Super Admin', role: 'SUPER_ADMIN', phoneNumber: '' },
+      { id: 2, email: 'hub@comhub.co.za', password: 'hub123', fullName: 'Hub Manager', role: 'HUB_ADMIN', phoneNumber: '+27123456789' },
+      { id: 3, email: 'agent@comhub.co.za', password: 'agent123', fullName: 'Delivery Agent', role: 'DELIVERY_AGENT', phoneNumber: '+27123456788' },
+      { id: 4, email: 'client@comhub.co.za', password: 'client123', fullName: 'Community Client', role: 'CLIENT', phoneNumber: '+27123456787' },
+    ];
+    localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(defaultUsers));
+    return defaultUsers;
+  }
+  return JSON.parse(stored);
+}
+
+function saveDemoUsers(users: DemoUser[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+  }
+}
+
+function getCurrentSession(): DemoUser | null {
+  if (typeof window === 'undefined') return null;
+  const stored = localStorage.getItem(DEMO_SESSION_KEY);
+  return stored ? JSON.parse(stored) : null;
+}
+
+function setCurrentSession(user: DemoUser | null) {
+  if (typeof window !== 'undefined') {
+    if (user) {
+      localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(DEMO_SESSION_KEY);
+    }
+  }
+}
 type AccessUser = Pick<AuthUser, 'id' | 'name' | 'fullName' | 'email' | 'phoneNumber' | 'role' | 'hubId'>;
 
 type AuthContextValue = {
@@ -97,6 +141,9 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<AuthUser>;
   register: (fullName: string, email: string, phoneNumber: string, password: string) => Promise<AuthUser>;
   signOut: () => Promise<void>;
+  createUser: (fullName: string, email: string, phoneNumber: string, password: string, role: AuthRole) => Promise<AuthUser>;
+  getUsers: () => DemoUser[];
+  deleteUser: (id: number) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -107,50 +154,144 @@ function useAuth() {
   return context;
 }
 
+// Admin-only hook for user management
+function useAdminAuth() {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAdminAuth must be used inside AuthProvider');
+  const { user } = context;
+  if (user?.role !== 'SUPER_ADMIN') {
+    throw new Error('Admin access required');
+  }
+  return context;
+}
+
 async function authRequest(path: string, options?: RequestInit) {
   const apiUrl = import.meta.env.VITE_API_URL || '';
   const url = apiUrl ? `${apiUrl}/api/auth/${path}` : `/api/auth/${path}`;
   
-  // If no API URL is configured, use demo mode
+  // Simplified authentication - works without API server
   if (!apiUrl) {
-    console.log('Demo mode: Using fallback authentication for', path);
+    console.log('Simplified authentication for', path);
+    
     if (path === 'me') {
-      return { user: null };
+      const session = getCurrentSession();
+      return { user: session ? {
+        id: session.id,
+        name: session.fullName,
+        fullName: session.fullName,
+        email: session.email,
+        phoneNumber: session.phoneNumber,
+        role: session.role,
+        hubId: null
+      } : null };
     }
+    
     if (path === 'login') {
       try {
         const body = JSON.parse(options?.body as string || '{}');
-        console.log('Demo login attempt:', body.email);
-        // Allow any email/password for demo mode
-        const isAdmin = body.email === 'admin@comhub.co.za';
-        return { user: { 
-          id: 1, 
-          name: isAdmin ? 'Super Admin' : body.email.split('@')[0], 
-          fullName: isAdmin ? 'Super Admin' : body.email.split('@')[0], 
-          email: body.email, 
-          phoneNumber: '', 
-          role: isAdmin ? 'SUPER_ADMIN' as AuthRole : 'CLIENT' as AuthRole, 
-          hubId: null 
+        console.log('Login attempt:', body.email);
+        
+        // Hardcoded admin credentials
+        if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
+          const adminUser: DemoUser = {
+            id: 1,
+            email: body.email,
+            password: body.password,
+            fullName: 'Super Admin',
+            role: 'SUPER_ADMIN',
+            phoneNumber: ''
+          };
+          setCurrentSession(adminUser);
+          return { user: {
+            id: adminUser.id,
+            name: adminUser.fullName,
+            fullName: adminUser.fullName,
+            email: adminUser.email,
+            phoneNumber: adminUser.phoneNumber,
+            role: adminUser.role,
+            hubId: null
+          } };
+        }
+        
+        // Any other credentials work as community client
+        const users = getDemoUsers();
+        let user = users.find(u => u.email === body.email);
+        
+        if (!user) {
+          // Create new user if doesn't exist
+          user = {
+            id: Math.max(...users.map(u => u.id), 0) + 1,
+            email: body.email,
+            password: body.password,
+            fullName: body.email?.split('@')[0] || 'User',
+            role: 'CLIENT',
+            phoneNumber: ''
+          };
+          users.push(user);
+          saveDemoUsers(users);
+        }
+        
+        setCurrentSession(user);
+        return { user: {
+          id: user.id,
+          name: user.fullName,
+          fullName: user.fullName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          hubId: null
         } };
       } catch (e) {
-        console.error('Demo login error:', e);
+        console.error('Login error:', e);
         throw new Error('Invalid request');
       }
     }
+    
     if (path === 'register') {
       try {
         const body = JSON.parse(options?.body as string || '{}');
-        console.log('Demo register attempt:', body.email);
-        return { user: { id: Math.floor(Math.random() * 1000), name: body.fullName, fullName: body.fullName, email: body.email, phoneNumber: body.phoneNumber, role: 'CLIENT' as AuthRole, hubId: null } };
+        console.log('Register attempt:', body.email);
+        const users = getDemoUsers();
+        
+        // Check if user already exists
+        if (users.find(u => u.email === body.email)) {
+          throw new Error('User already exists');
+        }
+        
+        const newUser: DemoUser = {
+          id: Math.max(...users.map(u => u.id), 0) + 1,
+          email: body.email,
+          password: body.password,
+          fullName: body.fullName,
+          role: 'CLIENT',
+          phoneNumber: body.phoneNumber
+        };
+        
+        users.push(newUser);
+        saveDemoUsers(users);
+        setCurrentSession(newUser);
+        
+        return { user: {
+          id: newUser.id,
+          name: newUser.fullName,
+          fullName: newUser.fullName,
+          email: newUser.email,
+          phoneNumber: newUser.phoneNumber,
+          role: newUser.role,
+          hubId: null
+        } };
       } catch (e) {
-        console.error('Demo register error:', e);
+        console.error('Register error:', e);
         throw new Error('Invalid request');
       }
     }
+    
     if (path === 'logout') {
-      console.log('Demo logout');
+      console.log('Logout');
+      setCurrentSession(null);
       return {};
     }
+    
     console.error('Unknown auth path:', path);
     throw new Error('Authentication request failed');
   }
@@ -171,7 +312,37 @@ function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     signIn: async (email, password) => { const payload = await authRequest('login', { method: 'POST', body: JSON.stringify({ email, password }) }); if (!payload.user) throw new Error('Authentication response did not include a user'); setUser(payload.user); return payload.user; },
     register: async (fullName, email, phoneNumber, password) => { const payload = await authRequest('register', { method: 'POST', body: JSON.stringify({ fullName, email, phoneNumber, password }) }); if (!payload.user) throw new Error('Registration response did not include a user'); setUser(payload.user); return payload.user; },
-    signOut: async () => { await authRequest('logout', { method: 'POST' }).catch(() => undefined); setUser(null); },
+    signOut: async () => { await authRequest('logout', { method: 'POST' }).catch(() => undefined); setUser(null); setCurrentSession(null); },
+    createUser: async (fullName, email, phoneNumber, password, role) => {
+      const users = getDemoUsers();
+      if (users.find(u => u.email === email)) {
+        throw new Error('User already exists');
+      }
+      const newUser: DemoUser = {
+        id: Math.max(...users.map(u => u.id), 0) + 1,
+        email,
+        password,
+        fullName,
+        role,
+        phoneNumber
+      };
+      users.push(newUser);
+      saveDemoUsers(users);
+      return {
+        id: newUser.id,
+        name: newUser.fullName,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        phoneNumber: newUser.phoneNumber,
+        role: newUser.role,
+        hubId: null
+      };
+    },
+    getUsers: () => getDemoUsers(),
+    deleteUser: (id) => {
+      const users = getDemoUsers().filter(u => u.id !== id);
+      saveDemoUsers(users);
+    }
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -639,7 +810,7 @@ function WorkspaceRoute({ role, clientPage, children }: { role: Role; clientPage
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <RoleGate role="client"><ShopPage /></RoleGate>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <RoleGate role="client"><ShopPage /></RoleGate>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
