@@ -427,7 +427,8 @@ html, body {
 
 /* Ensure app content is visible */
 .app-shell > * {
-  display: block;
+  display: block !important;
+  visibility: visible !important;
 }
 
 /* Ensure auth card is visible */
@@ -435,6 +436,8 @@ html, body {
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 /* Ensure all main containers are visible */
@@ -444,6 +447,24 @@ html, body {
 .queue-layout,
 .delivery-layout {
   display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Force all elements to be visible */
+* {
+  visibility: visible !important;
+}
+
+/* But hide script and style tags */
+script, style, head, meta, link {
+  visibility: hidden !important;
+}
+
+/* Make body and html visible */
+html, body {
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 /* Mobile-first centered layout */
