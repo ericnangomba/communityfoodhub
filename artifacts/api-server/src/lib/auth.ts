@@ -80,13 +80,24 @@ export function verifyPassword(password: string, storedHash: string) {
 }
 
 function publicUser(user: Partial<AuthUser> & { id: number; name?: string; fullName?: string; email?: string; phoneNumber?: string; role?: AppRole; hubId?: number | null }): AuthUser {
+  if (!user) {
+    return {
+      id: 0,
+      name: '',
+      fullName: '',
+      email: '',
+      phoneNumber: '',
+      role: 'CLIENT',
+      hubId: null,
+    };
+  }
   return {
     id: user.id,
     name: user.name,
-    fullName: user.fullName ?? "",
-    email: user.email ?? "",
-    phoneNumber: user.phoneNumber ?? "",
-    role: user.role ?? "CLIENT",
+    fullName: user.fullName ?? '',
+    email: user.email ?? '',
+    phoneNumber: user.phoneNumber ?? '',
+    role: user.role ?? 'CLIENT',
     hubId: user.hubId ?? null,
   };
 }
