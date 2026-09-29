@@ -790,7 +790,7 @@ function CommandPage() {
         {data && (
           <>
             <div className="metric-grid">
-              <Metric label="Orders this month" value={data.totalOrders.toLocaleString()} note="+12.4% vs last month" icon={ShoppingBasket} accent="sun" />
+              <Metric label="Orders this month" value={data.totalOrders?.toLocaleString() ?? '0'} note="+12.4% vs last month" icon={ShoppingBasket} accent="sun" />
               <Metric label="Active hubs" value={String(data.activeHubs).padStart(2, '0')} note="All hubs reporting" icon={Store} accent="mint" />
               <Metric label="Local savings" value={money(data.localSavings)} note="Passed to households" icon={WalletCards} accent="coral" />
               <Metric label="Currency retained" value={money(data.retainedCurrency)} note="Circulating in the network" icon={LineChart} accent="blue" />
@@ -907,68 +907,9 @@ function PricingPage() {
 function ZonesPage() {
   const zones = useListZones({ query: { queryKey: getListZonesQueryKey(), staleTime: 60_000 } });
   const [selected, setSelected] = useState<number | null>(null);
-  
-  // Use dummy data if API is not available
-  const dummyZones = [
-    { id: 1, name: "Elsies River Ward 28", municipality: "City of Cape Town", hubName: "Elsies River Hub", households: 1240, status: "LIVE" },
-    { id: 2, name: "Elsies River Ward 29", municipality: "City of Cape Town", hubName: "Elsies River Hub", households: 980, status: "LIVE" },
-    { id: 3, name: "Goodwood Ward 55", municipality: "City of Cape Town", hubName: "Elsies River Hub", households: 760, status: "READY" },
-  ];
-  
-  const rows = Array.isArray(zones.data) && zones.data.length > 0 ? zones.data : dummyZones;
+  const rows = Array.isArray(zones.data) ? zones.data : [];
   const selectedZone = rows.find((zone) => zone.id === selected) ?? rows[0];
-  
-  // Ward 28 specific map visualization
-  const ward28Map = selectedZone?.name.includes("Ward 28") ? (
-    <div className="ward28-map-container">
-      <div className="ward28-map">
-        <div className="map-background">
-          <div className="virtual-hub">
-            <div className="hub-marker">
-              <span className="hub-icon">🏢</span>
-              <span className="hub-label">Virtual Hub</span>
-            </div>
-          </div>
-          <div className="virtual-warehouse">
-            <div className="warehouse-marker">
-              <span className="warehouse-icon">📦</span>
-              <span className="warehouse-label">Virtual Warehouse</span>
-            </div>
-          </div>
-          <div className="coverage-area">
-            <div className="household-dots">
-              {Array.from({ length: 50 }).map((_, i) => (
-                <div key={i} className="household-dot" style={{
-                  left: `${20 + Math.random() * 60}%`,
-                  top: `${20 + Math.random() * 60}%`,
-                  animationDelay: `${Math.random() * 2}s`
-                }} />
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="map-legend-ward28">
-          <span><span className="legend-dot hub-dot" /> Virtual Hub</span>
-          <span><span className="legend-dot warehouse-dot" /> Virtual Warehouse</span>
-          <span><span className="legend-dot household-dot" /> Households</span>
-        </div>
-      </div>
-      <div className="ward28-stats">
-        <div className="stat-card">
-          <span className="stat-label">Total Households</span>
-          <strong className="stat-value">{selectedZone?.households.toLocaleString()}</strong>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Coverage</span>
-          <strong className="stat-value">89%</strong>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Active Orders</span>
-          <strong className="stat-value">24</strong>
-        </div>
-      </div>
-    </div>
-  ) : null;
+  return <AppShell role="super" eyebrow="Network · Ward coverage" title="Know where the work lands."><div className="zones-intro"><div><span className="eyebrow"><span className="eyebrow-line" /> Western Cape map room</span><h2>Coverage is a <i>relationship.</i></h2><p>Track household reach by ward and keep each local hub resourced for the work ahead.</p></div><div className="coverage-total"><strong>{rows.reduce((sum, zone) => sum + (zone.households || 0), 0).toLocaleString()}</strong><span>households in view</span></div></div><QueryState loading={zones.isLoading} error={zones.isError} empty={!rows.length} onRetry={() => zones.refetch()}><div className="zones-grid"><Panel className="map-panel"><div className="panel-head"><div><span className="tiny-label">Coverage view</span><h3>Ward network</h3></div><div className="map-tools"><button className="icon-button" onClick={() => zones.refetch()} data-testid="button-map-search"><Search size={16} /></button><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-map-settings"><Settings2 size={16} /></button></div></div><div className="map-canvas"><div className="map-river river-one" /><div className="map-river river-two" />{rows.map((zone, index) => <button key={zone.id} className={`map-node node-${index % 6} ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-node-${zone.id}`}><span>{zone.households}</span><i /></button>)}<div className="map-label label-north">NORTH</div><div className="map-label label-south">SOUTHERN SUBURBS</div><div className="map-scale">5 km <span /></div></div><div className="map-legend"><span><i className="legend-node active" /> Active coverage</span><span><i className="legend-node growing" /> Growing reach</span><span><i className="legend-node watch" /> Needs attention</span></div></Panel><Panel className="zone-list-panel"><div className="panel-head"><div><span className="tiny-label">Ward register</span><h3>{rows.length} wards in network</h3></div><div className="zone-list">{rows.map((zone) => <div className={`zone-row ${selectedZone?.id === zone.id ? 'selected' : ''}`} key={zone.id} onClick={() => setSelected(zone.id)}><div><b>{zone.name}</b><small>{zone.municipality}</small></div><div><span className={`status-dot ${zone.status === 'LIVE' ? 'green' : zone.status === 'READY' ? 'amber' : 'red'}`} />{zone.status}</div><strong>{zone.households?.toLocaleString() ?? '0'}</strong></div>)}</div></Panel></div></QueryState></AppShell>;
   return <AppShell role="super" eyebrow="Network · Ward coverage" title="Know where the work lands."><div className="zones-intro"><div><span className="eyebrow"><span className="eyebrow-line" /> Western Cape map room</span><h2>Coverage is a <i>relationship.</i></h2><p>Track household reach by ward and keep each local hub resourced for the work ahead.</p></div><div className="coverage-total"><strong>{rows.reduce((sum, zone) => sum + zone.households, 0).toLocaleString()}</strong><span>households in view</span></div></div><QueryState loading={zones.isLoading} error={zones.isError} empty={!rows.length} onRetry={() => zones.refetch()}><div className="zones-grid"><Panel className="map-panel"><div className="panel-head"><div><span className="tiny-label">Coverage view</span><h3>Ward network</h3></div><div className="map-tools"><button className="icon-button" onClick={() => zones.refetch()} data-testid="button-map-search"><Search size={16} /></button><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-map-settings"><Settings2 size={16} /></button></div></div><div className="map-canvas"><div className="map-river river-one" /><div className="map-river river-two" />{rows.map((zone, index) => <button key={zone.id} className={`map-node node-${index % 6} ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-node-${zone.id}`}><span>{zone.households}</span><i /></button>)}<div className="map-label label-north">NORTH</div><div className="map-label label-south">SOUTHERN SUBURBS</div><div className="map-scale">5 km <span /></div></div><div className="map-legend"><span><i className="legend-node active" /> Active coverage</span><span><i className="legend-node growing" /> Growing reach</span><span><i className="legend-node watch" /> Needs attention</span></div></Panel><Panel className="zone-list-panel"><div className="panel-head"><div><span className="tiny-label">Ward register</span><h3>{rows.length} zones · sorted by reach</h3></div><span className="mono">WC / ZONES</span></div><div className="zone-list">{rows.map((zone) => <button key={zone.id} className={`zone-row ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-${zone.id}`}><span className="zone-number">{String(zone.id).padStart(2, '0')}</span><div><b>{zone.name}</b><small>{zone.municipality} · {zone.hubName}</small></div><strong>{zone.households.toLocaleString()}</strong><StatusPill status={zone.status} /></button>)}</div>{selectedZone && <div className="zone-detail"><div className="zone-detail-head"><span className="hub-avatar">{initials(selectedZone.hubName)}</span><div><span className="tiny-label">Selected ward</span><h3>{selectedZone.name}</h3></div><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-close-zone-detail"><X size={16} /></button></div><div className="zone-detail-meta"><span><Users size={15} /> {selectedZone.households.toLocaleString()} households</span><span><Store size={15} /> {selectedZone.hubName}</span></div></div>}</Panel></div></QueryState></AppShell>;
 }
 
