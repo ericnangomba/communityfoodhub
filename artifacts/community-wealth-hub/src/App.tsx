@@ -313,7 +313,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
     signIn: async (email, password) => { const payload = await authRequest('login', { method: 'POST', body: JSON.stringify({ email, password }) }); if (!payload.user) throw new Error('Authentication response did not include a user'); setUser(payload.user); return payload.user; },
     register: async (fullName, email, phoneNumber, password) => { const payload = await authRequest('register', { method: 'POST', body: JSON.stringify({ fullName, email, phoneNumber, password }) }); if (!payload.user) throw new Error('Registration response did not include a user'); setUser(payload.user); return payload.user; },
     signOut: async () => { await authRequest('logout', { method: 'POST' }).catch(() => undefined); setUser(null); setCurrentSession(null); },
-    createUser: async (fullName, email, phoneNumber, password, role) => {
+  createUser: async (fullName, email, phoneNumber, password, role) => {
       const users = getDemoUsers();
       if (users.find(u => u.email === email)) {
         throw new Error('User already exists');
@@ -578,7 +578,8 @@ function ShopPage() {
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [whatsappText, setWhatsappText] = useState('Hi, please send 2 rice 2kg and 1 cooking oil 750ml to 14 Avon Road, Elsies River.');
   const [confirmation, setConfirmation] = useState<Order | null>(null);
-  const items = catalog.data ?? [];
+  // Ensure items is always an array
+  const items = Array.isArray(catalog.data) ? catalog.data : [];
   const categories = ['All', ...Array.from(new Set(items.map((item) => item.category)))];
   const shown = items.filter((item) => category === 'All' || item.category === category);
   const cartItems = items.filter((item) => cart[item.id]);
@@ -586,7 +587,8 @@ function ShopPage() {
   const itemCount = cartItems.reduce((sum, item) => sum + (cart[item.id] ?? 0), 0);
   const setQuantity = (id: number, amount: number) => setCart((current) => ({ ...current, [id]: Math.max(0, amount) }));
   const submitOrder = () => {
-    const hubId = hubs.data?.[0]?.id;
+    const safeHubs = Array.isArray(hubs.data) ? hubs.data : [];
+    const hubId = safeHubs[0]?.id;
     if (!hubId || !clientName || !phone || !address || !cartItems.length || !paymentMethod) return;
     createOrder.mutate({ data: { clientName, clientPhone: phone, hubId, address, orderSource: 'WEB_APP', paymentMethod, lines: cartItems.map((item) => ({ itemName: item.name, packageSize: item.packageSize, quantity: cart[item.id] ?? 0, unitPrice: item.communityPrice })) } }, {
       onSuccess: (order) => { setConfirmation(order); setCart({}); queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }); },
@@ -621,7 +623,8 @@ function OrdersPage() {
   const updateStatus = useUpdateOrderStatus();
   const [filter, setFilter] = useState('all');
   const statuses = ['all', 'received', 'packing', 'ready', 'out for delivery', 'delivered'];
-  const rows = (orders.data ?? []).filter((order) => filter === 'all' || order.status.toLowerCase() === filter);
+  const safeOrders = Array.isArray(orders.data) ? orders.data : [];
+  const rows = safeOrders.filter((order) => filter === 'all' || order.status.toLowerCase() === filter);
   const moveOrder = (order: Order) => {
     const sequence = ['received', 'packing', 'ready', 'out for delivery', 'delivered'];
     const next = sequence[Math.min(sequence.indexOf(order.status.toLowerCase()) + 1, sequence.length - 1)] ?? 'packing';
@@ -659,7 +662,7 @@ function CommandPage() {
             <p>Here is how local circulation is holding up across the network.</p>
           </div>
           <div className="command-actions">
-            <button className="button button-secondary" onClick={() => { dashboard.refetch(); hubs.refetch(); pricing.refetch(); catalog.refetch(); }} data-testid="button-refresh-command"><RefreshCw size={15} /> Sync data</button>
+            <button className="button button-secondary" onClick={() => { dashboard.refetch(); hubs.refetch(); pricing.refetch(); if (catalog.refetch) catalog.refetch(); }} data-testid="button-refresh-command"><RefreshCw size={15} /> Sync data</button>
             <Link href="/pricing" className="button button-primary" data-testid="link-command-pricing"><SlidersHorizontal size={15} /> Adjust pricing</Link>
           </div>
         </div>
@@ -678,7 +681,7 @@ function CommandPage() {
               </Panel>
               <Panel className="hubs-panel">
                 <div className="panel-head"><div><span className="tiny-label">Operational health</span><h3>Community hubs</h3></div><Link href="/zones" className="text-link">View coverage <ArrowRight size={14} /></Link></div>
-                <div className="hub-list">{(hubs.data ?? []).map((hub) => <HubRow key={hub.id} hub={hub} />)}</div>
+                <div className="hub-list">{(Array.isArray(hubs.data) ? hubs.data : []).map((hub) => <HubRow key={hub.id} hub={hub} />)}</div>
               </Panel>
               <Panel className="forecast-panel">
                 <div className="panel-head"><div><span className="tiny-label">Demand signal</span><h3>Stock to watch</h3></div><BarChart3 size={17} /></div>
@@ -691,8 +694,8 @@ function CommandPage() {
             </div>
             <div className="leakage-strip"><div><span className="tiny-label">The point of the network</span><h3>Less leakage. More life in the places we share.</h3></div><div className="leakage-stats"><div><small>Corporate leakage</small><strong>{money(data.corporateLeakage)}</strong></div><ArrowRight size={20} /><div><small>Service reinvestment</small><strong className="green-text">{money(data.serviceReinvestment)}</strong></div></div></div>
             <div className="admin-control-grid">
-              <StockPanel items={catalog.data ?? []} />
-              <AccessPanel hubs={hubs.data ?? []} />
+              <StockPanel items={Array.isArray(catalog.data) ? catalog.data : []} />
+              <AccessPanel hubs={Array.isArray(hubs.data) ? hubs.data : []} />
             </div>
             <Panel className="insight-panel">
               <div className="panel-head"><div><span className="tiny-label">AI-assisted monitor</span><h3>Intelligence center</h3></div><Sparkles size={17} /></div>
@@ -710,16 +713,20 @@ function CommandPage() {
 }
 
 function StockPanel({ items }: { items: CatalogItem[] }) {
-  return <Panel className="stock-panel"><div className="panel-head"><div><span className="tiny-label">Warehouse stock</span><h3>Inventory at a glance</h3></div><Database size={17} /></div><div className="stock-list">{items.map((item) => <div className="stock-row" key={item.id}><div><b>{item.name}</b><small>{item.packageSize} · R{item.communityPrice.toFixed(2)}</small></div><div className="stock-bar"><span className={item.stockQuantity < 30 ? 'low' : ''} style={{ width: `${Math.min(100, (item.stockQuantity / 150) * 100)}%` }} /></div><strong className={item.stockQuantity < 30 ? 'low-text' : ''}>{item.stockQuantity}</strong></div>)}</div></Panel>;
+  // Ensure items is always an array
+  const safeItems = Array.isArray(items) ? items : [];
+  return <Panel className="stock-panel"><div className="panel-head"><div><span className="tiny-label">Warehouse stock</span><h3>Inventory at a glance</h3></div><Database size={17} /></div><div className="stock-list">{safeItems.map((item) => <div className="stock-row" key={item.id}><div><b>{item.name}</b><small>{item.packageSize} · R{item.communityPrice.toFixed(2)}</small></div><div className="stock-bar"><span className={item.stockQuantity < 30 ? 'low' : ''} style={{ width: `${Math.min(100, (item.stockQuantity / 150) * 100)}%` }} /></div><strong className={item.stockQuantity < 30 ? 'low-text' : ''}>{item.stockQuantity}</strong></div>)}</div></Panel>;
 }
 
 function AccessPanel({ hubs }: { hubs: Hub[] }) {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<AccessUser[]>([]);
   const [busy, setBusy] = useState<number | null>(null);
-  useEffect(() => { fetch('/api/auth/users', { credentials: 'include' }).then((response) => response.json()).then((payload) => setUsers(payload.users ?? [])).catch(() => setUsers([])); }, []);
+  useEffect(() => { fetch('/api/auth/users', { credentials: 'include' }).then((response) => response.json()).then((payload) => setUsers(Array.isArray(payload.users) ? payload.users : [])).catch(() => setUsers([])); }, []);
   const assign = async (userId: number, role: AuthRole, hubId: number | null) => { setBusy(userId); try { const response = await fetch(`/api/auth/users/${userId}/role`, { method: 'PATCH', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ role, hubId }) }); const payload = await response.json(); if (response.ok) setUsers((current) => current.map((item) => item.id === userId ? payload.user : item)); } finally { setBusy(null); } };
-  return <Panel className="access-panel"><div className="panel-head"><div><span className="tiny-label">Resource access</span><h3>Assign the team</h3></div><Users size={17} /></div><p className="panel-helper">Community clients register themselves. Assign Hub Admin and Delivery Agent access here.</p><div className="access-list">{users.map((item) => <div className="access-row" key={item.id}><div><b>{item.fullName}</b><small>{item.email}</small></div><select disabled={busy === item.id || item.id === currentUser?.id} value={item.role} onChange={(event) => void assign(item.id, event.target.value as AuthRole, item.hubId)}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><select disabled={busy === item.id || item.id === currentUser?.id} value={item.hubId ?? ''} onChange={(event) => void assign(item.id, item.role, event.target.value ? Number(event.target.value) : null)}><option value="">All hubs</option>{hubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.name}</option>)}</select></div>)}</div></Panel>;
+  // Ensure hubs is always an array
+  const safeHubs = Array.isArray(hubs) ? hubs : [];
+  return <Panel className="access-panel"><div className="panel-head"><div><span className="tiny-label">Resource access</span><h3>Assign the team</h3></div><Users size={17} /></div><p className="panel-helper">Community clients register themselves. Assign Hub Admin and Delivery Agent access here.</p><div className="access-list">{users.map((item) => <div className="access-row" key={item.id}><div><b>{item.fullName}</b><small>{item.email}</small></div><select disabled={busy === item.id || item.id === currentUser?.id} value={item.role} onChange={(event) => void assign(item.id, event.target.value as AuthRole, item.hubId)}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><select disabled={busy === item.id || item.id === currentUser?.id} value={item.hubId ?? ''} onChange={(event) => void assign(item.id, item.role, event.target.value ? Number(event.target.value) : null)}><option value="">All hubs</option>{safeHubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.name}</option>)}</select></div>)}</div></Panel>;
 }
 
 function HubRow({ hub }: { hub: Hub }) {
@@ -744,7 +751,7 @@ function PricingPage() {
 function ZonesPage() {
   const zones = useListZones({ query: { queryKey: getListZonesQueryKey(), staleTime: 60_000 } });
   const [selected, setSelected] = useState<number | null>(null);
-  const rows = zones.data ?? [];
+  const rows = Array.isArray(zones.data) ? zones.data : [];
   const selectedZone = rows.find((zone) => zone.id === selected) ?? rows[0];
   return <AppShell role="super" eyebrow="Network · Ward coverage" title="Know where the work lands."><div className="zones-intro"><div><span className="eyebrow"><span className="eyebrow-line" /> Western Cape map room</span><h2>Coverage is a <i>relationship.</i></h2><p>Track household reach by ward and keep each local hub resourced for the work ahead.</p></div><div className="coverage-total"><strong>{rows.reduce((sum, zone) => sum + zone.households, 0).toLocaleString()}</strong><span>households in view</span></div></div><QueryState loading={zones.isLoading} error={zones.isError} empty={!rows.length} onRetry={() => zones.refetch()}><div className="zones-grid"><Panel className="map-panel"><div className="panel-head"><div><span className="tiny-label">Coverage view</span><h3>Ward network</h3></div><div className="map-tools"><button className="icon-button" onClick={() => zones.refetch()} data-testid="button-map-search"><Search size={16} /></button><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-map-settings"><Settings2 size={16} /></button></div></div><div className="map-canvas"><div className="map-river river-one" /><div className="map-river river-two" />{rows.map((zone, index) => <button key={zone.id} className={`map-node node-${index % 6} ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-node-${zone.id}`}><span>{zone.households}</span><i /></button>)}<div className="map-label label-north">NORTH</div><div className="map-label label-south">SOUTHERN SUBURBS</div><div className="map-scale">5 km <span /></div></div><div className="map-legend"><span><i className="legend-node active" /> Active coverage</span><span><i className="legend-node growing" /> Growing reach</span><span><i className="legend-node watch" /> Needs attention</span></div></Panel><Panel className="zone-list-panel"><div className="panel-head"><div><span className="tiny-label">Ward register</span><h3>{rows.length} zones · sorted by reach</h3></div><span className="mono">WC / ZONES</span></div><div className="zone-list">{rows.map((zone) => <button key={zone.id} className={`zone-row ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-${zone.id}`}><span className="zone-number">{String(zone.id).padStart(2, '0')}</span><div><b>{zone.name}</b><small>{zone.municipality} · {zone.hubName}</small></div><strong>{zone.households.toLocaleString()}</strong><StatusPill status={zone.status} /></button>)}</div>{selectedZone && <div className="zone-detail"><div className="zone-detail-head"><span className="hub-avatar">{initials(selectedZone.hubName)}</span><div><span className="tiny-label">Selected ward</span><h3>{selectedZone.name}</h3></div><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-close-zone-detail"><X size={16} /></button></div><div className="zone-detail-meta"><span><Users size={15} /> {selectedZone.households.toLocaleString()} households</span><span><Store size={15} /> {selectedZone.hubName}</span></div></div>}</Panel></div></QueryState></AppShell>;
 }
@@ -768,7 +775,8 @@ function RoleGate({ role, children }: { role: Role; children: ReactNode }) {
 function ClientOrdersPage() {
   const { user } = useAuth();
   const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 15_000 } });
-  const rows = (orders.data ?? []).filter((order) => order.clientName === user?.fullName);
+  const safeOrders = Array.isArray(orders.data) ? orders.data : [];
+  const rows = safeOrders.filter((order) => order.clientName === user?.fullName);
   return <AppShell role="client" eyebrow="Community account · Orders" title="Keep track of every basket."><Panel className="client-status-panel"><div className="panel-head"><div><span className="tiny-label">Your order queue</span><h2>Orders in motion</h2></div><button className="button button-secondary" onClick={() => orders.refetch()}><RefreshCw size={15} /> Refresh</button></div><QueryState loading={orders.isLoading} error={orders.isError} empty={!rows.length} onRetry={() => orders.refetch()}><div className="client-order-list">{rows.map((order) => <div className="client-order-row" key={order.id}><div><b>{order.reference}</b><small>{shortDate(order.createdAt)} · {order.itemCount} items</small></div><strong>{money(order.totalAmount)}</strong><StatusPill status={order.status} /></div>)}</div></QueryState></Panel></AppShell>;
 }
 
@@ -776,8 +784,10 @@ function ClientDeliveryStatusPage() {
   const { user } = useAuth();
   const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 15_000 } });
   const deliveries = useListDeliveries({ query: { queryKey: getListDeliveriesQueryKey(), refetchInterval: 15_000 } });
-  const references = new Set((orders.data ?? []).filter((order) => order.clientName === user?.fullName).map((order) => order.reference));
-  const rows = (deliveries.data ?? []).filter((delivery) => references.has(delivery.orderReference));
+  const safeOrders = Array.isArray(orders.data) ? orders.data : [];
+  const safeDeliveries = Array.isArray(deliveries.data) ? deliveries.data : [];
+  const references = new Set(safeOrders.filter((order) => order.clientName === user?.fullName).map((order) => order.reference));
+  const rows = safeDeliveries.filter((delivery) => references.has(delivery.orderReference));
   return <AppShell role="client" eyebrow="Community account · Delivery" title="Know when it is on the way."><Panel className="client-status-panel"><div className="panel-head"><div><span className="tiny-label">Live delivery status</span><h2>Your doorstep updates</h2></div><span className="status-pill green"><span className="status-dot" /> Live updates</span></div><QueryState loading={orders.isLoading || deliveries.isLoading} error={orders.isError || deliveries.isError} empty={!rows.length} onRetry={() => { void orders.refetch(); void deliveries.refetch(); }}><div className="client-order-list">{rows.map((delivery) => <div className="client-order-row" key={delivery.id}><div><b>{delivery.orderReference}</b><small>{delivery.dropoff}</small></div><strong>{delivery.eta}</strong><StatusPill status={delivery.status} /></div>)}</div></QueryState></Panel></AppShell>;
 }
 
