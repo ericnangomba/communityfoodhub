@@ -49,7 +49,7 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname),
   build: {
-    outDir: path.resolve(import.meta.dirname, 'dist'),
+    outDir: path.resolve(import.meta.dirname, 'dist/public'),
     emptyOutDir: true,
     copyPublicDir: true,
     sourcemap: false, // Disable source maps to fix X.map error
