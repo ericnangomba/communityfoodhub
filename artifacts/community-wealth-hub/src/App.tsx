@@ -578,21 +578,100 @@ function ShopPage() {
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [whatsappText, setWhatsappText] = useState('Hi, please send 2 rice 2kg and 1 cooking oil 750ml to 14 Avon Road, Elsies River.');
   const [confirmation, setConfirmation] = useState<Order | null>(null);
+  
+  // Use dummy data if API is not available
+  const dummyCatalog: CatalogItem[] = [
+    { id: 1, name: "Long Grain Rice", category: "Staples", packageSize: "1kg", communityPrice: 21.99, retailPrice: 25.99, savingsPercent: 15, stockQuantity: 138, imageKey: "rice", popular: true },
+    { id: 2, name: "Maize Meal", category: "Staples", packageSize: "2.5kg", communityPrice: 38.5, retailPrice: 44.99, savingsPercent: 14, stockQuantity: 86, imageKey: "maize", popular: true },
+    { id: 3, name: "Cooking Oil", category: "Kitchen", packageSize: "750ml", communityPrice: 29.99, retailPrice: 36.99, savingsPercent: 19, stockQuantity: 64, imageKey: "oil" },
+    { id: 4, name: "Sugar", category: "Staples", packageSize: "1kg", communityPrice: 18.5, retailPrice: 22.99, savingsPercent: 20, stockQuantity: 42, imageKey: "sugar" },
+    { id: 5, name: "Brown Bread", category: "Fresh", packageSize: "700g", communityPrice: 15.99, retailPrice: 19.99, savingsPercent: 20, stockQuantity: 28, imageKey: "bread", popular: true },
+    { id: 6, name: "Baked Beans", category: "Pantry", packageSize: "410g", communityPrice: 13.5, retailPrice: 16.99, savingsPercent: 21, stockQuantity: 112, imageKey: "beans" },
+    { id: 7, name: "Washing Powder", category: "Home", packageSize: "500g", communityPrice: 24.99, retailPrice: 31.99, savingsPercent: 22, stockQuantity: 19, imageKey: "washing" },
+    { id: 8, name: "Tea Bags", category: "Kitchen", packageSize: "100 pack", communityPrice: 32.5, retailPrice: 39.99, savingsPercent: 19, stockQuantity: 51, imageKey: "tea" },
+  ];
+  
+  const dummyHubs: Hub[] = [
+    { id: 1, name: "Elsies River Hub", region: "Northern Suburbs", status: "ACTIVE", activeOrders: 12, stockHealth: 87, agentCount: 8 },
+    { id: 2, name: "Southern Suburbs Hub", region: "Southern Suburbs", status: "ACTIVE", activeOrders: 8, stockHealth: 93, agentCount: 6 },
+  ];
+  
   // Ensure items is always an array
-  const items = Array.isArray(catalog.data) ? catalog.data : [];
+  const items = Array.isArray(catalog.data) && catalog.data.length > 0 ? catalog.data : dummyCatalog;
+  const safeHubs = Array.isArray(hubs.data) && hubs.data.length > 0 ? hubs.data : dummyHubs;
   const categories = ['All', ...Array.from(new Set(items.map((item) => item.category)))];
   const shown = items.filter((item) => category === 'All' || item.category === category);
   const cartItems = items.filter((item) => cart[item.id]);
   const total = cartItems.reduce((sum, item) => sum + item.communityPrice * (cart[item.id] ?? 0), 0);
   const itemCount = cartItems.reduce((sum, item) => sum + (cart[item.id] ?? 0), 0);
   const setQuantity = (id: number, amount: number) => setCart((current) => ({ ...current, [id]: Math.max(0, amount) }));
+  
   const submitOrder = () => {
-    const safeHubs = Array.isArray(hubs.data) ? hubs.data : [];
     const hubId = safeHubs[0]?.id;
     if (!hubId || !clientName || !phone || !address || !cartItems.length || !paymentMethod) return;
-    createOrder.mutate({ data: { clientName, clientPhone: phone, hubId, address, orderSource: 'WEB_APP', paymentMethod, lines: cartItems.map((item) => ({ itemName: item.name, packageSize: item.packageSize, quantity: cart[item.id] ?? 0, unitPrice: item.communityPrice })) } }, {
-      onSuccess: (order) => { setConfirmation(order); setCart({}); queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }); },
-    });
+    
+    // Simulate payment processing
+    if (paymentMethod === 'CARD') {
+      // Simulate card payment processing
+      const cardNumber = prompt('Enter card number (simulated):', '4242 4242 4242 4242');
+      const expiry = prompt('Enter expiry (MM/YY):', '12/25');
+      const cvv = prompt('Enter CVV:', '123');
+      
+      if (!cardNumber || !expiry || !cvv) {
+        alert('Payment details required');
+        return;
+      }
+      
+      // Simulate payment approval
+      if (Math.random() > 0.1) { // 90% success rate
+        alert('Payment approved! Order placed successfully.');
+      } else {
+        alert('Payment declined. Please try another payment method.');
+        return;
+      }
+    }
+    
+    const orderData = {
+      clientName,
+      clientPhone: phone,
+      hubId,
+      address,
+      orderSource: 'WEB_APP',
+      paymentMethod,
+      lines: cartItems.map((item) => ({ itemName: item.name, packageSize: item.packageSize, quantity: cart[item.id] ?? 0, unitPrice: item.communityPrice }))
+    };
+    
+    if (createOrder.mutate) {
+      createOrder.mutate({ data: orderData }, {
+        onSuccess: (order) => { setConfirmation(order); setCart({}); queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }); },
+      });
+    } else {
+      // Fallback for demo mode
+      const mockOrder: Order = {
+        id: Math.floor(Math.random() * 1000),
+        reference: `CWH-${Math.floor(Math.random() * 10000)}`,
+        clientName,
+        clientPhone: phone,
+        hubName: safeHubs[0]?.name || 'Elsies River Hub',
+        address,
+        orderSource: 'WEB_APP',
+        status: 'PENDING',
+        paymentMethod,
+        paymentStatus: 'PAID',
+        totalAmount: total,
+        itemCount,
+        createdAt: new Date().toISOString(),
+        lines: cartItems.map((item) => ({ itemName: item.name, packageSize: item.packageSize, quantity: cart[item.id] ?? 0, unitPrice: item.communityPrice }))
+      };
+      setConfirmation(mockOrder);
+      setCart({});
+    }
+  };
+  
+  const handleWhatsAppOrder = () => {
+    const orderText = encodeURIComponent(whatsappText);
+    window.open(`https://wa.me/27798567196?text=${orderText}`, '_blank');
+    setWhatsappOpen(false);
   };
   return <AppShell role="client" eyebrow="Community storefront" title="Good food, fairly priced.">
     <div className="shop-layout">
@@ -611,6 +690,48 @@ function ShopPage() {
       </aside>
     </div>
     {whatsappOpen && <div className="modal-backdrop"><div className="modal whatsapp-modal"><div className="modal-head"><div><span className="tiny-label">WhatsApp simulator</span><h3>Send a pantry message</h3></div><button className="icon-button" onClick={() => setWhatsappOpen(false)} data-testid="button-close-whatsapp"><X size={18} /></button></div><div className="wa-preview"><div className="wa-bubble">Hi there. Tell us what you need and we’ll turn it into a clear order for the hub.</div><div className="wa-bubble outgoing">{whatsappText}</div></div><textarea value={whatsappText} onChange={(event) => setWhatsappText(event.target.value)} data-testid="input-whatsapp-message" /><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Client name" data-testid="input-whatsapp-name" /><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Mobile number" data-testid="input-whatsapp-phone" /><button className="button button-primary button-wide" disabled={!clientName || !phone || parseWhatsApp.isPending} onClick={() => parseWhatsApp.mutate({ data: { message: whatsappText, clientName, clientPhone: phone } }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }) })} data-testid="button-parse-whatsapp">{parseWhatsApp.isPending ? 'Reading message…' : 'Parse into order'} <Zap size={15} /></button>{parseWhatsApp.data && <div className="parsed-result"><div><Check size={15} /><b>Order understood at {Math.round(parseWhatsApp.data.confidence * 100)}% confidence</b></div><span>{parseWhatsApp.data.parsedMessage}</span><small>Reference {parseWhatsApp.data.order.reference} · {money(parseWhatsApp.data.order.totalAmount)}</small></div>}</div></div>}
+  </AppShell>;
+}
+
+// Super Admin Shop Page - shows storefront content
+function AdminShopPage() {
+  const catalog = useListCatalog({ query: { queryKey: getListCatalogQueryKey(), staleTime: 60_000 } });
+  
+  // Use dummy data if API is not available
+  const dummyCatalog: CatalogItem[] = [
+    { id: 1, name: "Long Grain Rice", category: "Staples", packageSize: "1kg", communityPrice: 21.99, retailPrice: 25.99, savingsPercent: 15, stockQuantity: 138, imageKey: "rice", popular: true },
+    { id: 2, name: "Maize Meal", category: "Staples", packageSize: "2.5kg", communityPrice: 38.5, retailPrice: 44.99, savingsPercent: 14, stockQuantity: 86, imageKey: "maize", popular: true },
+    { id: 3, name: "Cooking Oil", category: "Kitchen", packageSize: "750ml", communityPrice: 29.99, retailPrice: 36.99, savingsPercent: 19, stockQuantity: 64, imageKey: "oil" },
+    { id: 4, name: "Sugar", category: "Staples", packageSize: "1kg", communityPrice: 18.5, retailPrice: 22.99, savingsPercent: 20, stockQuantity: 42, imageKey: "sugar" },
+    { id: 5, name: "Brown Bread", category: "Fresh", packageSize: "700g", communityPrice: 15.99, retailPrice: 19.99, savingsPercent: 20, stockQuantity: 28, imageKey: "bread", popular: true },
+    { id: 6, name: "Baked Beans", category: "Pantry", packageSize: "410g", communityPrice: 13.5, retailPrice: 16.99, savingsPercent: 21, stockQuantity: 112, imageKey: "beans" },
+    { id: 7, name: "Washing Powder", category: "Home", packageSize: "500g", communityPrice: 24.99, retailPrice: 31.99, savingsPercent: 22, stockQuantity: 19, imageKey: "washing" },
+    { id: 8, name: "Tea Bags", category: "Kitchen", packageSize: "100 pack", communityPrice: 32.5, retailPrice: 39.99, savingsPercent: 19, stockQuantity: 51, imageKey: "tea" },
+  ];
+  
+  const items = Array.isArray(catalog.data) && catalog.data.length > 0 ? catalog.data : dummyCatalog;
+  const categories = ['All', ...Array.from(new Set(items.map((item) => item.category)))];
+  const [category, setCategory] = useState('All');
+  const shown = items.filter((item) => category === 'All' || item.category === category);
+  
+  return <AppShell role="super" eyebrow="Super admin · Storefront" title="View community inventory.">
+    <div className="shop-layout">
+      <section className="shop-main">
+        <div className="shop-hero"><div><span className="eyebrow"><span className="eyebrow-line" /> Admin view</span><h2>Community <i>storefront.</i></h2><p>View and manage inventory available to community clients.</p></div><div className="hero-stamp"><span>ADMIN</span><strong>{items.length}</strong><small>items in catalog</small></div></div>
+        <div className="shop-toolbar"><div className="category-tabs">{categories.map((item) => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="catalog-count"><span className="live-pulse" /> {shown.length} items shown</div></div>
+        <div className="product-grid">{shown.map((item) => <div className="product-card admin-view" key={item.id}><div className={`product-art art-${item.id % 5}`}><img src={productImages[item.imageKey]} alt={`${item.name} ${item.packageSize}`} loading="lazy" /></div><div className="product-info"><div><span className="product-category">{item.category}</span><h3>{item.name}</h3><p>{item.packageSize}</p></div><div className="price-row"><div><strong>{money(item.communityPrice)}</strong><del>{money(item.retailPrice)}</del></div><span className="stock-badge">Stock: {item.stockQuantity}</span></div></div></div>)}</div>
+      </section>
+      <aside className="admin-shop-sidebar">
+        <Panel className="stock-summary-panel">
+          <div className="panel-head"><div><span className="tiny-label">Stock summary</span><h3>Inventory status</h3></div><Database size={17} /></div>
+          <div className="stock-summary">
+            <div><span>Total items</span><strong>{items.length}</strong></div>
+            <div><span>Low stock</span><strong className="red-text">{items.filter(i => i.stockQuantity < 30).length}</strong></div>
+            <div><span>Popular items</span><strong>{items.filter(i => i.popular).length}</strong></div>
+          </div>
+        </Panel>
+      </aside>
+    </div>
   </AppShell>;
 }
 
@@ -719,14 +840,49 @@ function StockPanel({ items }: { items: CatalogItem[] }) {
 }
 
 function AccessPanel({ hubs }: { hubs: Hub[] }) {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, getUsers, createUser, deleteUser } = useAuth();
   const [users, setUsers] = useState<AccessUser[]>([]);
   const [busy, setBusy] = useState<number | null>(null);
-  useEffect(() => { fetch('/api/auth/users', { credentials: 'include' }).then((response) => response.json()).then((payload) => setUsers(Array.isArray(payload.users) ? payload.users : [])).catch(() => setUsers([])); }, []);
-  const assign = async (userId: number, role: AuthRole, hubId: number | null) => { setBusy(userId); try { const response = await fetch(`/api/auth/users/${userId}/role`, { method: 'PATCH', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ role, hubId }) }); const payload = await response.json(); if (response.ok) setUsers((current) => current.map((item) => item.id === userId ? payload.user : item)); } finally { setBusy(null); } };
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUser, setNewUser] = useState({ fullName: '', email: '', phoneNumber: '', password: '', role: 'CLIENT' as AuthRole, hubId: null as number | null });
+  
+  useEffect(() => {
+    setUsers(getUsers());
+  }, [getUsers]);
+  
+  const assign = async (userId: number, role: AuthRole, hubId: number | null) => { 
+    setBusy(userId); 
+    try { 
+      // Update user in local storage
+      const updatedUsers = users.map((item) => item.id === userId ? { ...item, role, hubId } : item);
+      setUsers(updatedUsers);
+      // In real API, this would be: const response = await fetch(`/api/auth/users/${userId}/role`, { method: 'PATCH', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ role, hubId }) });
+    } finally { 
+      setBusy(null); 
+    } 
+  };
+  
+  const handleAddUser = async () => {
+    if (!newUser.fullName || !newUser.email || !newUser.password) return;
+    try {
+      const createdUser = await createUser(newUser.fullName, newUser.email, newUser.phoneNumber, newUser.password, newUser.role);
+      setUsers([...users, createdUser]);
+      setShowAddUser(false);
+      setNewUser({ fullName: '', email: '', phoneNumber: '', password: '', role: 'CLIENT', hubId: null });
+    } catch (error) {
+      console.error('Failed to create user:', error);
+    }
+  };
+  
+  const handleDeleteUser = (userId: number) => {
+    deleteUser(userId);
+    setUsers(users.filter(u => u.id !== userId));
+  };
+  
   // Ensure hubs is always an array
   const safeHubs = Array.isArray(hubs) ? hubs : [];
-  return <Panel className="access-panel"><div className="panel-head"><div><span className="tiny-label">Resource access</span><h3>Assign the team</h3></div><Users size={17} /></div><p className="panel-helper">Community clients register themselves. Assign Hub Admin and Delivery Agent access here.</p><div className="access-list">{users.map((item) => <div className="access-row" key={item.id}><div><b>{item.fullName}</b><small>{item.email}</small></div><select disabled={busy === item.id || item.id === currentUser?.id} value={item.role} onChange={(event) => void assign(item.id, event.target.value as AuthRole, item.hubId)}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><select disabled={busy === item.id || item.id === currentUser?.id} value={item.hubId ?? ''} onChange={(event) => void assign(item.id, item.role, event.target.value ? Number(event.target.value) : null)}><option value="">All hubs</option>{safeHubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.name}</option>)}</select></div>)}</div></Panel>;
+  
+  return <Panel className="access-panel"><div className="panel-head"><div><span className="tiny-label">Resource access</span><h3>Assign the team</h3></div><Users size={17} /></div><p className="panel-helper">Community clients register themselves. Assign Hub Admin and Delivery Agent access here.</p><button className="button button-secondary button-wide" onClick={() => setShowAddUser(true)}><Plus size={15} /> Add new user</button>{showAddUser && <div className="add-user-form"><input value={newUser.fullName} onChange={(e) => setNewUser({...newUser, fullName: e.target.value})} placeholder="Full name" /><input value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} placeholder="Email" /><input value={newUser.phoneNumber} onChange={(e) => setNewUser({...newUser, phoneNumber: e.target.value})} placeholder="Phone number" /><input value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} placeholder="Password" type="password" /><select value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value as AuthRole})}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><div className="form-actions"><button className="button button-primary" onClick={handleAddUser}>Create User</button><button className="button button-secondary" onClick={() => setShowAddUser(false)}>Cancel</button></div></div>}<div className="access-list">{users.map((item) => <div className="access-row" key={item.id}><div><b>{item.fullName}</b><small>{item.email}</small></div><select disabled={busy === item.id || item.id === currentUser?.id} value={item.role} onChange={(event) => void assign(item.id, event.target.value as AuthRole, item.hubId)}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><select disabled={busy === item.id || item.id === currentUser?.id} value={item.hubId ?? ''} onChange={(event) => void assign(item.id, item.role, event.target.value ? Number(event.target.value) : null)}><option value="">All hubs</option>{safeHubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.name}</option>)}</select><button className="icon-button" onClick={() => handleDeleteUser(item.id)} disabled={item.id === currentUser?.id}><Trash2 size={14} /></button></div>)}</div></Panel>;
 }
 
 function HubRow({ hub }: { hub: Hub }) {
@@ -751,8 +907,68 @@ function PricingPage() {
 function ZonesPage() {
   const zones = useListZones({ query: { queryKey: getListZonesQueryKey(), staleTime: 60_000 } });
   const [selected, setSelected] = useState<number | null>(null);
-  const rows = Array.isArray(zones.data) ? zones.data : [];
+  
+  // Use dummy data if API is not available
+  const dummyZones = [
+    { id: 1, name: "Elsies River Ward 28", municipality: "City of Cape Town", hubName: "Elsies River Hub", households: 1240, status: "LIVE" },
+    { id: 2, name: "Elsies River Ward 29", municipality: "City of Cape Town", hubName: "Elsies River Hub", households: 980, status: "LIVE" },
+    { id: 3, name: "Goodwood Ward 55", municipality: "City of Cape Town", hubName: "Elsies River Hub", households: 760, status: "READY" },
+  ];
+  
+  const rows = Array.isArray(zones.data) && zones.data.length > 0 ? zones.data : dummyZones;
   const selectedZone = rows.find((zone) => zone.id === selected) ?? rows[0];
+  
+  // Ward 28 specific map visualization
+  const ward28Map = selectedZone?.name.includes("Ward 28") ? (
+    <div className="ward28-map-container">
+      <div className="ward28-map">
+        <div className="map-background">
+          <div className="virtual-hub">
+            <div className="hub-marker">
+              <span className="hub-icon">🏢</span>
+              <span className="hub-label">Virtual Hub</span>
+            </div>
+          </div>
+          <div className="virtual-warehouse">
+            <div className="warehouse-marker">
+              <span className="warehouse-icon">📦</span>
+              <span className="warehouse-label">Virtual Warehouse</span>
+            </div>
+          </div>
+          <div className="coverage-area">
+            <div className="household-dots">
+              {Array.from({ length: 50 }).map((_, i) => (
+                <div key={i} className="household-dot" style={{
+                  left: `${20 + Math.random() * 60}%`,
+                  top: `${20 + Math.random() * 60}%`,
+                  animationDelay: `${Math.random() * 2}s`
+                }} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="map-legend-ward28">
+          <span><span className="legend-dot hub-dot" /> Virtual Hub</span>
+          <span><span className="legend-dot warehouse-dot" /> Virtual Warehouse</span>
+          <span><span className="legend-dot household-dot" /> Households</span>
+        </div>
+      </div>
+      <div className="ward28-stats">
+        <div className="stat-card">
+          <span className="stat-label">Total Households</span>
+          <strong className="stat-value">{selectedZone?.households.toLocaleString()}</strong>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Coverage</span>
+          <strong className="stat-value">89%</strong>
+        </div>
+        <div className="stat-card">
+          <span className="stat-label">Active Orders</span>
+          <strong className="stat-value">24</strong>
+        </div>
+      </div>
+    </div>
+  ) : null;
   return <AppShell role="super" eyebrow="Network · Ward coverage" title="Know where the work lands."><div className="zones-intro"><div><span className="eyebrow"><span className="eyebrow-line" /> Western Cape map room</span><h2>Coverage is a <i>relationship.</i></h2><p>Track household reach by ward and keep each local hub resourced for the work ahead.</p></div><div className="coverage-total"><strong>{rows.reduce((sum, zone) => sum + zone.households, 0).toLocaleString()}</strong><span>households in view</span></div></div><QueryState loading={zones.isLoading} error={zones.isError} empty={!rows.length} onRetry={() => zones.refetch()}><div className="zones-grid"><Panel className="map-panel"><div className="panel-head"><div><span className="tiny-label">Coverage view</span><h3>Ward network</h3></div><div className="map-tools"><button className="icon-button" onClick={() => zones.refetch()} data-testid="button-map-search"><Search size={16} /></button><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-map-settings"><Settings2 size={16} /></button></div></div><div className="map-canvas"><div className="map-river river-one" /><div className="map-river river-two" />{rows.map((zone, index) => <button key={zone.id} className={`map-node node-${index % 6} ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-node-${zone.id}`}><span>{zone.households}</span><i /></button>)}<div className="map-label label-north">NORTH</div><div className="map-label label-south">SOUTHERN SUBURBS</div><div className="map-scale">5 km <span /></div></div><div className="map-legend"><span><i className="legend-node active" /> Active coverage</span><span><i className="legend-node growing" /> Growing reach</span><span><i className="legend-node watch" /> Needs attention</span></div></Panel><Panel className="zone-list-panel"><div className="panel-head"><div><span className="tiny-label">Ward register</span><h3>{rows.length} zones · sorted by reach</h3></div><span className="mono">WC / ZONES</span></div><div className="zone-list">{rows.map((zone) => <button key={zone.id} className={`zone-row ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-${zone.id}`}><span className="zone-number">{String(zone.id).padStart(2, '0')}</span><div><b>{zone.name}</b><small>{zone.municipality} · {zone.hubName}</small></div><strong>{zone.households.toLocaleString()}</strong><StatusPill status={zone.status} /></button>)}</div>{selectedZone && <div className="zone-detail"><div className="zone-detail-head"><span className="hub-avatar">{initials(selectedZone.hubName)}</span><div><span className="tiny-label">Selected ward</span><h3>{selectedZone.name}</h3></div><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-close-zone-detail"><X size={16} /></button></div><div className="zone-detail-meta"><span><Users size={15} /> {selectedZone.households.toLocaleString()} households</span><span><Store size={15} /> {selectedZone.hubName}</span></div></div>}</Panel></div></QueryState></AppShell>;
 }
 
@@ -820,7 +1036,7 @@ function WorkspaceRoute({ role, clientPage, children }: { role: Role; clientPage
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <RoleGate role="client"><ShopPage /></RoleGate>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <WorkspaceRoute role="client" clientPage={<ShopPage />}><AdminShopPage /></WorkspaceRoute>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
