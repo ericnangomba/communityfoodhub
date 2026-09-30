@@ -88,8 +88,8 @@ import './index.css';
 const queryClient = new QueryClient();
 const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 
-type Role = 'client' | 'hub' | 'agent' | 'super';
-type AuthRole = 'CLIENT' | 'HUB_ADMIN' | 'DELIVERY_AGENT' | 'SUPER_ADMIN';
+type Role = 'client' | 'hub' | 'agent' | 'warehouse' | 'super';
+type AuthRole = 'CLIENT' | 'HUB_ADMIN' | 'DELIVERY_AGENT' | 'WAREHOUSE_MANAGER' | 'SUPER_ADMIN';
 type AuthUser = { id: number; name?: string; fullName: string | null; email: string; phoneNumber: string | null; role: AuthRole; hubId: number | null };
 type DemoUser = { id: number; email: string; password: string; fullName: string; role: AuthRole; phoneNumber: string };
 
@@ -389,7 +389,7 @@ function intendedRole(): Role {
 }
 
 function workspacePath(role: AuthRole) {
-  return role === 'SUPER_ADMIN' ? '/command' : role === 'HUB_ADMIN' ? '/orders' : role === 'DELIVERY_AGENT' ? '/deliveries' : '/shop';
+  return role === 'SUPER_ADMIN' ? '/command' : role === 'HUB_ADMIN' ? '/orders' : role === 'DELIVERY_AGENT' ? '/deliveries' : role === 'WAREHOUSE_MANAGER' ? '/orders' : '/shop';
 }
 
 function money(value: number) {
@@ -884,7 +884,7 @@ function AccessPanel({ hubs }: { hubs: Hub[] }) {
   // Ensure hubs is always an array
   const safeHubs = Array.isArray(hubs) ? hubs : [];
   
-  return <Panel className="access-panel"><div className="panel-head"><div><span className="tiny-label">Resource access</span><h3>Assign the team</h3></div><Users size={17} /></div><p className="panel-helper">Community clients register themselves. Assign Hub Admin and Delivery Agent access here.</p><button className="button button-secondary button-wide" onClick={() => setShowAddUser(true)}><Plus size={15} /> Add new user</button>{showAddUser && <div className="add-user-form"><input value={newUser.fullName} onChange={(e) => setNewUser({...newUser, fullName: e.target.value})} placeholder="Full name" /><input value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} placeholder="Email" /><input value={newUser.phoneNumber} onChange={(e) => setNewUser({...newUser, phoneNumber: e.target.value})} placeholder="Phone number" /><input value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} placeholder="Password" type="password" /><select value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value as AuthRole})}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><div className="form-actions"><button className="button button-primary" onClick={handleAddUser}>Create User</button><button className="button button-secondary" onClick={() => setShowAddUser(false)}>Cancel</button></div></div>}<div className="access-list">{users.map((item) => <div className="access-row" key={item.id}><div><b>{item.fullName}</b><small>{item.email}</small></div><select disabled={busy === item.id || item.id === currentUser?.id} value={item.role} onChange={(event) => void assign(item.id, event.target.value as AuthRole, item.hubId)}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="SUPER_ADMIN">Super Admin</option></select><select disabled={busy === item.id || item.id === currentUser?.id} value={item.hubId ?? ''} onChange={(event) => void assign(item.id, item.role, event.target.value ? Number(event.target.value) : null)}><option value="">All hubs</option>{safeHubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.name}</option>)}</select><button className="icon-button" onClick={() => handleDeleteUser(item.id)} disabled={item.id === currentUser?.id}><Trash size={14} /></button></div>)}</div></Panel>;
+  return <Panel className="access-panel"><div className="panel-head"><div><span className="tiny-label">Resource access</span><h3>Assign the team</h3></div><Users size={17} /></div><p className="panel-helper">Community clients register themselves. Assign Hub Admin, Delivery Agent, and Warehouse Manager access here.</p><button className="button button-secondary button-wide" onClick={() => setShowAddUser(true)}><Plus size={15} /> Add new user</button>{showAddUser && <div className="add-user-form"><input value={newUser.fullName} onChange={(e) => setNewUser({...newUser, fullName: e.target.value})} placeholder="Full name" /><input value={newUser.email} onChange={(e) => setNewUser({...newUser, email: e.target.value})} placeholder="Email" /><input value={newUser.phoneNumber} onChange={(e) => setNewUser({...newUser, phoneNumber: e.target.value})} placeholder="Phone number" /><input value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} placeholder="Password" type="password" /><select value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value as AuthRole})}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="WAREHOUSE_MANAGER">Warehouse Manager</option><option value="SUPER_ADMIN">Super Admin</option></select><div className="form-actions"><button className="button button-primary" onClick={handleAddUser}>Create User</button><button className="button button-secondary" onClick={() => setShowAddUser(false)}>Cancel</button></div></div>}<div className="access-list">{users.map((item) => <div className="access-row" key={item.id}><div><b>{item.fullName}</b><small>{item.email}</small></div><select disabled={busy === item.id || item.id === currentUser?.id} value={item.role} onChange={(event) => void assign(item.id, event.target.value as AuthRole, item.hubId)}><option value="CLIENT">Community Client</option><option value="HUB_ADMIN">Hub Admin</option><option value="DELIVERY_AGENT">Delivery Agent</option><option value="WAREHOUSE_MANAGER">Warehouse Manager</option><option value="SUPER_ADMIN">Super Admin</option></select><select disabled={busy === item.id || item.id === currentUser?.id} value={item.hubId ?? ''} onChange={(event) => void assign(item.id, item.role, event.target.value ? Number(event.target.value) : null)}><option value="">All hubs</option>{safeHubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.name}</option>)}</select><button className="icon-button" onClick={() => handleDeleteUser(item.id)} disabled={item.id === currentUser?.id}><Trash size={14} /></button></div>)}</div></Panel>;
 }
 
 function HubRow({ hub }: { hub: Hub }) {
@@ -935,7 +935,7 @@ function RoleGate({ role, children }: { role: Role; children: ReactNode }) {
     setLocation('/sign-in');
     return null;
   }
-  const normalizedRole = user.role === 'SUPER_ADMIN' ? 'super' : user.role === 'HUB_ADMIN' ? 'hub' : user.role === 'DELIVERY_AGENT' ? 'agent' : 'client';
+  const normalizedRole = user.role === 'SUPER_ADMIN' ? 'super' : user.role === 'HUB_ADMIN' ? 'hub' : user.role === 'DELIVERY_AGENT' ? 'agent' : user.role === 'WAREHOUSE_MANAGER' ? 'warehouse' : 'client';
   if (normalizedRole !== role) {
     setLocation(workspacePath(user.role));
     return null;
@@ -986,12 +986,14 @@ function SignUpPage() {
 function WorkspaceRoute({ role, clientPage, children }: { role: Role; clientPage?: ReactNode; children: ReactNode }) {
   const { user } = useAuth();
   if (user?.role === 'CLIENT' && clientPage) return clientPage;
+  // Allow both hub and warehouse managers to access the same pages
+  if (role === 'hub' && user?.role === 'WAREHOUSE_MANAGER') return <RoleGate role="warehouse">{children}</RoleGate>;
   return <RoleGate role={role}>{children}</RoleGate>;
 }
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <WorkspaceRoute role="client" clientPage={<ShopPage />}><AdminShopPage /></WorkspaceRoute>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <WorkspaceRoute role="client" clientPage={<ShopPage />}><AdminShopPage /></WorkspaceRoute>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage /></DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/inventory">{() => <WorkspaceRoute role="warehouse"><OrdersPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
