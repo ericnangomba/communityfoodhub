@@ -352,6 +352,7 @@ const roles: { id: Role; label: string; detail: string; icon: typeof ShoppingBas
   { id: 'client', label: 'Community Client', detail: 'Shop household staples', icon: ShoppingBasket, href: '/shop' },
   { id: 'hub', label: 'Hub Admin', detail: 'Run the order queue', icon: Store, href: '/orders' },
   { id: 'agent', label: 'Delivery Agent', detail: 'Move orders home', icon: Bike, href: '/deliveries' },
+  { id: 'warehouse', label: 'Warehouse Manager', detail: 'Manage inventory', icon: Boxes, href: '/inventory' },
   { id: 'super', label: 'Super Admin', detail: 'See the full network', icon: LayoutDashboard, href: '/command' },
 ];
 
@@ -360,6 +361,7 @@ const navGroups = [
     { href: '/shop', label: 'Shop', icon: ShoppingBasket, role: 'client' as Role },
     { href: '/orders', label: 'Order queue', icon: Package, role: 'hub' as Role },
     { href: '/deliveries', label: 'Deliveries', icon: Bike, role: 'agent' as Role },
+    { href: '/inventory', label: 'Inventory', icon: Boxes, role: 'warehouse' as Role },
     { href: '/command', label: 'Command centre', icon: LayoutDashboard, role: 'super' as Role },
   ] },
   { label: 'Network', items: [
@@ -385,7 +387,7 @@ function setIntendedRole(role: Role) {
 
 function intendedRole(): Role {
   const role = window.sessionStorage.getItem('cwh-intended-role');
-  return role === 'super' || role === 'hub' || role === 'agent' ? role : 'client';
+  return role === 'super' || role === 'hub' || role === 'agent' || role === 'warehouse' ? role : 'client';
 }
 
 function workspacePath(role: AuthRole) {
@@ -478,6 +480,11 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
     ? [
         { href: '/orders', label: 'Orders', icon: Package },
         { href: '/deliveries', label: 'Deliveries', icon: Bike },
+      ]
+    : role === 'warehouse'
+    ? [
+        { href: '/inventory', label: 'Inventory', icon: Boxes },
+        { href: '/orders', label: 'Orders', icon: Package },
       ]
     : role === 'agent'
     ? [
@@ -927,6 +934,71 @@ function ZonesPage() {
   return <AppShell role="super" eyebrow="Network · Ward coverage" title="Know where the work lands."><div className="zones-intro"><div><span className="eyebrow"><span className="eyebrow-line" /> Western Cape map room</span><h2>Coverage is a <i>relationship.</i></h2><p>Track household reach by ward and keep each local hub resourced for the work ahead.</p></div><div className="coverage-total"><strong>{rows.reduce((sum, zone) => sum + zone.households, 0).toLocaleString()}</strong><span>households in view</span></div></div><QueryState loading={zones.isLoading} error={zones.isError} empty={!rows.length} onRetry={() => zones.refetch()}><div className="zones-grid"><Panel className="map-panel"><div className="panel-head"><div><span className="tiny-label">Coverage view</span><h3>{selectedZone ? selectedZone.name : 'Ward network'}</h3></div><div className="map-tools"><button className="icon-button" onClick={() => zones.refetch()} data-testid="button-map-search"><Search size={16} /></button>{selectedZone && <button className="icon-button" onClick={() => setSelected(null)} data-testid="button-map-settings"><X size={16} /></button>}</div></div>{showWard28Map ? <div className="map-canvas" style={{ padding: '16px' }}><Ward28Map /></div> : <div className="map-canvas"><div className="map-river river-one" /><div className="map-river river-two" />{rows.map((zone, index) => <button key={zone.id} className={`map-node node-${index % 6} ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-node-${zone.id}`}><span>{zone.households}</span><i /></button>)}<div className="map-label label-north">NORTH</div><div className="map-label label-south">SOUTHERN SUBURBS</div><div className="map-scale">5 km <span /></div></div>}{!showWard28Map && <div className="map-legend"><span><i className="legend-node active" /> Active coverage</span><span><i className="legend-node growing" /> Growing reach</span><span><i className="legend-node watch" /> Needs attention</span></div>}</Panel><Panel className="zone-list-panel"><div className="panel-head"><div><span className="tiny-label">Ward register</span><h3>{rows.length} zones · sorted by reach</h3></div><span className="mono">WC / ZONES</span></div><div className="zone-list">{rows.map((zone) => <button key={zone.id} className={`zone-row ${selectedZone?.id === zone.id ? 'selected' : ''}`} onClick={() => setSelected(zone.id)} data-testid={`button-zone-${zone.id}`}><span className="zone-number">{String(zone.id).padStart(2, '0')}</span><div><b>{zone.name}</b><small>{zone.municipality} · {zone.hubName}</small></div><strong>{zone.households.toLocaleString()}</strong><StatusPill status={zone.status} /></button>)}</div>{selectedZone && <div className="zone-detail"><div className="zone-detail-head"><span className="hub-avatar">{initials(selectedZone.hubName)}</span><div><span className="tiny-label">Selected ward</span><h3>{selectedZone.name}</h3></div><button className="icon-button" onClick={() => setSelected(null)} data-testid="button-close-zone-detail"><X size={16} /></button></div><div className="zone-detail-meta"><span><Users size={15} /> {selectedZone.households.toLocaleString()} households</span><span><Store size={15} /> {selectedZone.hubName}</span></div></div>}</Panel></div></QueryState></AppShell>;
 }
 
+// Warehouse Manager Inventory Page
+function InventoryPage() {
+  const catalog = useListCatalog({ query: { queryKey: getListCatalogQueryKey(), staleTime: 60_000 } });
+
+  // Use dummy data if API is not available
+  const dummyCatalog: CatalogItem[] = [
+    { id: 1, name: "Long Grain Rice", category: "Staples", packageSize: "1kg", communityPrice: 21.99, retailPrice: 25.99, savingsPercent: 15, stockQuantity: 138, imageKey: "rice", popular: true },
+    { id: 2, name: "Maize Meal", category: "Staples", packageSize: "2.5kg", communityPrice: 38.5, retailPrice: 44.99, savingsPercent: 14, stockQuantity: 86, imageKey: "maize", popular: true },
+    { id: 3, name: "Sunflower Oil", category: "Staples", packageSize: "750ml", communityPrice: 32.99, retailPrice: 39.99, savingsPercent: 18, stockQuantity: 45, imageKey: "oil", popular: false },
+    { id: 4, name: "White Sugar", category: "Staples", packageSize: "2kg", communityPrice: 27.5, retailPrice: 32.99, savingsPercent: 17, stockQuantity: 92, imageKey: "sugar", popular: false },
+    { id: 5, name: "Brown Bread", category: "Bakery", packageSize: "700g", communityPrice: 14.99, retailPrice: 18.99, savingsPercent: 21, stockQuantity: 120, imageKey: "bread", popular: true },
+    { id: 6, name: "Baked Beans", category: "Pantry", packageSize: "410g", communityPrice: 13.5, retailPrice: 16.99, savingsPercent: 21, stockQuantity: 112, imageKey: "beans", popular: false },
+    { id: 7, name: "Washing Powder", category: "Home", packageSize: "500g", communityPrice: 24.99, retailPrice: 31.99, savingsPercent: 22, stockQuantity: 19, imageKey: "washing", popular: false },
+    { id: 8, name: "Rooibos Tea", category: "Beverages", packageSize: "80 bags", communityPrice: 42.99, retailPrice: 54.99, savingsPercent: 22, stockQuantity: 67, imageKey: "tea", popular: false },
+  ];
+
+  const items = Array.isArray(catalog.data) && catalog.data.length > 0 ? catalog.data : dummyCatalog;
+  const lowStock = items.filter(item => item.stockQuantity < 50);
+  const totalStock = items.reduce((sum, item) => sum + item.stockQuantity, 0);
+
+  return <AppShell role="warehouse" eyebrow="Warehouse · Inventory" title="Manage stock levels.">
+    <div className="inventory-summary">
+      <div className="summary-card">
+        <span className="summary-label">Total Items</span>
+        <strong className="summary-value">{items.length}</strong>
+      </div>
+      <div className="summary-card">
+        <span className="summary-label">Total Stock</span>
+        <strong className="summary-value">{totalStock.toLocaleString()}</strong>
+      </div>
+      <div className="summary-card warning">
+        <span className="summary-label">Low Stock Items</span>
+        <strong className="summary-value">{lowStock.length}</strong>
+      </div>
+    </div>
+    <Panel className="inventory-panel">
+      <div className="panel-head">
+        <div>
+          <span className="tiny-label">Warehouse inventory</span>
+          <h3>Stock levels</h3>
+        </div>
+        <button className="button button-secondary" onClick={() => catalog.refetch()}>
+          <RefreshCw size={15} /> Refresh
+        </button>
+      </div>
+      <QueryState loading={catalog.isLoading} error={catalog.isError} empty={!items.length} onRetry={() => catalog.refetch()}>
+        <div className="inventory-list">
+          {items.map((item) => (
+            <div key={item.id} className={`inventory-row ${item.stockQuantity < 50 ? 'low-stock' : ''}`}>
+              <div>
+                <b>{item.name}</b>
+                <small>{item.category} · {item.packageSize}</small>
+              </div>
+              <div className="stock-info">
+                <span className="stock-quantity">{item.stockQuantity}</span>
+                <span className="stock-status">{item.stockQuantity < 50 ? 'Low' : 'OK'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </QueryState>
+    </Panel>
+  </AppShell>;
+}
+
 function RoleGate({ role, children }: { role: Role; children: ReactNode }) {
   const { loading, user } = useAuth();
   const [, setLocation] = useLocation();
@@ -993,7 +1065,7 @@ function WorkspaceRoute({ role, clientPage, children }: { role: Role; clientPage
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <WorkspaceRoute role="client" clientPage={<ShopPage />}><AdminShopPage /></WorkspaceRoute>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage /></DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/inventory">{() => <WorkspaceRoute role="warehouse"><OrdersPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <WorkspaceRoute role="client" clientPage={<ShopPage />}><AdminShopPage /></WorkspaceRoute>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<Client<InventoryPage />}><<InventoryPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage /></DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/inventory">{() => <WorkspaceRoute role="warehouse"><<InventoryPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
