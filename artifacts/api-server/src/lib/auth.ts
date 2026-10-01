@@ -6,7 +6,7 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 export const SESSION_COOKIE = "cwh_session";
 const SESSION_DAYS = 30;
 
-export type AppRole = "CLIENT" | "HUB_ADMIN" | "DELIVERY_AGENT" | "SUPER_ADMIN";
+export type AppRole = "CLIENT" | "HUB_ADMIN" | "DELIVERY_AGENT" | "WAREHOUSE_MANAGER" | "SUPER_ADMIN";
 
 export type AuthUser = {
   id: number;
@@ -38,18 +38,36 @@ function configureDemoAuth() {
   if (existing) {
     if (existing.role !== "SUPER_ADMIN") existing.role = "SUPER_ADMIN";
     if (existing.passwordHash !== hashPassword(password)) existing.passwordHash = hashPassword(password);
-    return { email, password };
+  } else {
+    fallbackUsers.set(email, {
+      id: fallbackUserId++,
+      name: "Community Wealth Super Admin",
+      fullName: "Community Wealth Super Admin",
+      email,
+      phoneNumber: "",
+      role: "SUPER_ADMIN",
+      hubId: null,
+      passwordHash: hashPassword(password),
+    });
   }
-  fallbackUsers.set(email, {
-    id: fallbackUserId++,
-    name: "Community Wealth Super Admin",
-    fullName: "Community Wealth Super Admin",
-    email,
-    phoneNumber: "",
-    role: "SUPER_ADMIN",
-    hubId: null,
-    passwordHash: hashPassword(password),
-  });
+
+  // Add warehouse manager demo user
+  const warehouseEmail = "warehouse@comhub.co.za";
+  const warehousePassword = "warehouse123";
+  const warehouseExisting = fallbackUsers.get(warehouseEmail);
+  if (!warehouseExisting) {
+    fallbackUsers.set(warehouseEmail, {
+      id: fallbackUserId++,
+      name: "Warehouse Manager",
+      fullName: "Warehouse Manager",
+      email: warehouseEmail,
+      phoneNumber: "+27123456786",
+      role: "WAREHOUSE_MANAGER",
+      hubId: null,
+      passwordHash: hashPassword(warehousePassword),
+    });
+  }
+
   return { email, password };
 }
 
@@ -127,16 +145,31 @@ export async function ensureConfiguredSuperAdmin() {
     if (existing.role !== "SUPER_ADMIN") {
       await (dbHandle.db.update(dbHandle.usersTable) as any).set({ role: "SUPER_ADMIN" }).where((eq as any)(dbHandle.usersTable.id, existing.id));
     }
-    return;
+  } else {
+    await (dbHandle.db.insert(dbHandle.usersTable) as any).values({
+      name: "Community Wealth Super Admin",
+      fullName: "Community Wealth Super Admin",
+      email,
+      passwordHash: hashPassword(password),
+      phoneNumber: "",
+      role: "SUPER_ADMIN",
+    });
   }
-  await (dbHandle.db.insert(dbHandle.usersTable) as any).values({
-    name: "Community Wealth Super Admin",
-    fullName: "Community Wealth Super Admin",
-    email,
-    passwordHash: hashPassword(password),
-    phoneNumber: "",
-    role: "SUPER_ADMIN",
-  });
+
+  // Ensure warehouse manager exists
+  const warehouseEmail = "warehouse@comhub.co.za";
+  const warehousePassword = "warehouse123";
+  const warehouseExisting = await findUserByEmail(warehouseEmail);
+  if (!warehouseExisting) {
+    await (dbHandle.db.insert(dbHandle.usersTable) as any).values({
+      name: "Warehouse Manager",
+      fullName: "Warehouse Manager",
+      email: warehouseEmail,
+      passwordHash: hashPassword(warehousePassword),
+      phoneNumber: "+27123456786",
+      role: "WAREHOUSE_MANAGER",
+    });
+  }
 }
 
 export async function createSession(userId: number) {
