@@ -463,6 +463,8 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
   const [mobileOpen, setMobileOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Array<{ id: number; type: string; title: string; message: string; timestamp: Date; read: boolean }>>([]);
   const { user, signOut } = useAuth();
   const currentRole = roles.find((item) => item.id === role) ?? roles[3];
   const isClient = user?.role === 'CLIENT';
@@ -508,6 +510,46 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Initialize demo notifications
+  useEffect(() => {
+    const demoNotifications = [
+      { id: 1, type: 'NEW_ORDER', title: 'New Order Received', message: 'Order #1234 from John Doe - R245.00', timestamp: new Date(Date.now() - 5 * 60 * 1000), read: false },
+      { id: 2, type: 'ORDER_CONFIRMED', title: 'Order Confirmed', message: 'Order #1233 confirmed by hub', timestamp: new Date(Date.now() - 15 * 60 * 1000), read: false },
+      { id: 3, type: 'LOW_STOCK', title: 'Low Stock Alert', message: 'Maize Meal is running low (45 units)', timestamp: new Date(Date.now() - 30 * 60 * 1000), read: true },
+      { id: 4, type: 'DELIVERY_STARTED', title: 'Delivery En Route', message: 'Agent #2 is on the way to 123 Main St', timestamp: new Date(Date.now() - 45 * 60 * 1000), read: true },
+      { id: 5, type: 'DELIVERED', title: 'Order Delivered', message: 'Order #1230 delivered successfully', timestamp: new Date(Date.now() - 60 * 60 * 1000), read: true },
+    ];
+    setNotifications(demoNotifications);
+  }, []);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const markAsRead = (id: number) => {
+    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+  const markAllAsRead = () => {
+    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  };
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'NEW_ORDER': return Package;
+      case 'ORDER_CONFIRMED': return CheckCircle;
+      case 'ORDER_PICKED': return Truck;
+      case 'DELIVERY_STARTED': return Bike;
+      case 'DELIVERED': return CheckCircle;
+      case 'LOW_STOCK': return AlertCircle;
+      default: return Bell;
+    }
+  };
+  const formatRelativeTime = (date: Date) => {
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return `${Math.floor(hours / 24)} days ago`;
+  };
+
   return <div className="app-shell">
     <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
       <div className="sidebar-head"><Brand compact /><button className="icon-button sidebar-close" onClick={() => setMobileOpen(false)} data-testid="button-close-menu"><X size={18} /></button></div>
@@ -530,7 +572,48 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
        <header className="topbar">
         <button className="mobile-menu icon-button" onClick={() => setMobileOpen(true)} data-testid="button-open-menu"><Menu size={20} /></button>
          <div className="topbar-copy">{eyebrow && <span>{eyebrow}</span>}<h1>{title}</h1></div>
-         <div className="topbar-actions"><span className="connection"><span className="live-pulse" /> Live network</span><button className="icon-button" onClick={() => setNoticeOpen((current) => !current)} data-testid="button-notifications"><Bell size={18} /><i /></button><div className="top-avatar">{initials(user?.fullName ?? currentRole.label)}</div></div>
+         <div className="topbar-actions"><span className="connection"><span className="live-pulse" /> Live network</span>
+         <div className="notification-wrapper">
+           <button className="icon-button notification-button" onClick={() => setNotificationOpen(!notificationOpen)} data-testid="button-notifications">
+             <Bell size={18} />
+             {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
+           </button>
+           {notificationOpen && (
+             <div className="notification-panel" data-testid="notification-panel">
+               <div className="notification-header">
+                 <h3>Notifications</h3>
+                 <button className="text-button" onClick={markAllAsRead}>Mark all as read</button>
+               </div>
+               <div className="notification-list">
+                 {notifications.length === 0 ? (
+                   <div className="notification-empty">
+                     <Bell size={32} />
+                     <span>No notifications</span>
+                   </div>
+                 ) : (
+                   notifications.map((notification) => {
+                     const Icon = getNotificationIcon(notification.type);
+                     return (
+                       <div key={notification.id} className={`notification-item ${notification.read ? 'read' : ''}`} onClick={() => markAsRead(notification.id)}>
+                         <div className="notification-icon"><Icon size={16} /></div>
+                         <div className="notification-content">
+                           <div className="notification-title">{notification.title}</div>
+                           <div className="notification-message">{notification.message}</div>
+                           <div className="notification-time">{formatRelativeTime(notification.timestamp)}</div>
+                         </div>
+                         {!notification.read && <span className="notification-dot" />}
+                       </div>
+                     );
+                   })
+                 )}
+               </div>
+               <div className="notification-footer">
+                 <button className="button button-secondary button-wide">View all notifications</button>
+               </div>
+             </div>
+           )}
+         </div>
+         <div className="top-avatar">{initials(user?.fullName ?? currentRole.label)}</div></div>
       </header>
       {noticeOpen && <div className="notice-popover" data-testid="notice-popover"><b>Network is moving well.</b><span>No new alerts for this workspace.</span></div>}
       <div className="page-wrap">{children}</div>
@@ -1581,7 +1664,10 @@ function CommandPage() {
   const hubs = useListHubs({ query: { queryKey: getListHubsQueryKey(), refetchInterval: 60_000 } });
   const catalog = useListCatalog({ query: { queryKey: getListCatalogQueryKey(), refetchInterval: 60_000 } });
   const pricing = useGetPricing({ query: { queryKey: getGetPricingQueryKey(), staleTime: 60_000 } });
+  const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 30_000 } });
   const data = dashboard.data;
+  const activeOrders = Array.isArray(orders.data) ? orders.data.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED') : [];
+  
   return (
     <AppShell role="super" eyebrow="Super admin · Network intelligence" title="The whole picture, clearly.">
       <QueryState loading={dashboard.isLoading} error={dashboard.isError} onRetry={() => dashboard.refetch()}>
@@ -1592,7 +1678,7 @@ function CommandPage() {
             <p>Here is how local circulation is holding up across the network.</p>
           </div>
           <div className="command-actions">
-            <button className="button button-secondary" onClick={() => { dashboard.refetch(); hubs.refetch(); pricing.refetch(); if (catalog.refetch) catalog.refetch(); }} data-testid="button-refresh-command"><RefreshCw size={15} /> Sync data</button>
+            <button className="button button-secondary" onClick={() => { dashboard.refetch(); hubs.refetch(); pricing.refetch(); orders.refetch(); if (catalog.refetch) catalog.refetch(); }} data-testid="button-refresh-command"><RefreshCw size={15} /> Sync data</button>
             <Link href="/pricing" className="button button-primary" data-testid="link-command-pricing"><SlidersHorizontal size={15} /> Adjust pricing</Link>
           </div>
         </div>
@@ -1600,7 +1686,7 @@ function CommandPage() {
           <>
             <div className="metric-grid">
               <Metric label="Orders this month" value={data.totalOrders?.toLocaleString() ?? '0'} note="+12.4% vs last month" icon={ShoppingBasket} accent="sun" />
-              <Metric label="Active hubs" value={String(data.activeHubs).padStart(2, '0')} note="All hubs reporting" icon={Store} accent="mint" />
+              <Metric label="Active orders" value={String(activeOrders.length).padStart(2, '0')} note="In progress" icon={Package} accent="mint" />
               <Metric label="Local savings" value={money(data.localSavings)} note="Passed to households" icon={WalletCards} accent="coral" />
               <Metric label="Currency retained" value={money(data.retainedCurrency)} note="Circulating in the network" icon={LineChart} accent="blue" />
             </div>
@@ -1622,6 +1708,107 @@ function CommandPage() {
                 <div className="activity-list">{data.recentActivity.map((item) => <div className="activity-row" key={item.id}><span className={`activity-dot ${statusTone(item.tone)}`} /><div><b>{item.title}</b><small>{item.detail}</small></div><time>{item.timestamp}</time></div>)}</div>
               </Panel>
             </div>
+            {/* Real-time Order Tracking Panel */}
+            <Panel className="order-tracking-panel">
+              <div className="panel-head">
+                <div>
+                  <span className="tiny-label">Real-time operations</span>
+                  <h3>Live order tracking</h3>
+                </div>
+                <span className="live-indicator"><span className="live-pulse" /> Live</span>
+              </div>
+              <div className="order-tracking-grid">
+                <div className="tracking-stats">
+                  <div className="tracking-stat">
+                    <span className="stat-label">Pending Payment</span>
+                    <strong className="stat-value">{activeOrders.filter(o => o.status === 'PENDING').length}</strong>
+                  </div>
+                  <div className="tracking-stat">
+                    <span className="stat-label">Hub Confirmed</span>
+                    <strong className="stat-value">{activeOrders.filter(o => o.status === 'HUB_CONFIRMED').length}</strong>
+                  </div>
+                  <div className="tracking-stat">
+                    <span className="stat-label">Warehouse Processing</span>
+                    <strong className="stat-value">{activeOrders.filter(o => o.status === 'WAREHOUSE_PICKED').length}</strong>
+                  </div>
+                  <div className="tracking-stat">
+                    <span className="stat-label">In Delivery</span>
+                    <strong className="stat-value">{activeOrders.filter(o => o.status === 'AGENT_PICKED').length}</strong>
+                  </div>
+                </div>
+                <div className="tracking-timeline">
+                  <h4>Order Flow</h4>
+                  <div className="flow-steps">
+                    <div className="flow-step">
+                      <span className="step-icon"><Package size={16} /></span>
+                      <div>
+                        <strong>Order Created</strong>
+                        <small>Client places order</small>
+                      </div>
+                    </div>
+                    <div className="flow-arrow"><ArrowRight size={14} /></div>
+                    <div className="flow-step">
+                      <span className="step-icon"><CheckCircle size={16} /></span>
+                      <div>
+                        <strong>Hub Confirmed</strong>
+                        <small>Payment verified</small>
+                      </div>
+                    </div>
+                    <div className="flow-arrow"><ArrowRight size={14} /></div>
+                    <div className="flow-step">
+                      <span className="step-icon"><Boxes size={16} /></span>
+                      <div>
+                        <strong>Warehouse Picked</strong>
+                        <small>Items collected</small>
+                      </div>
+                    </div>
+                    <div className="flow-arrow"><ArrowRight size={14} /></div>
+                    <div className="flow-step">
+                      <span className="step-icon"><Bike size={16} /></span>
+                      <div>
+                        <strong>Agent Pickup</strong>
+                        <small>Delivery started</small>
+                      </div>
+                    </div>
+                    <div className="flow-arrow"><ArrowRight size={14} /></div>
+                    <div className="flow-step">
+                      <span className="step-icon"><CheckCircle size={16} /></span>
+                      <div>
+                        <strong>Delivered</strong>
+                        <small>Client received</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="active-orders-list">
+                <h4>Active Orders ({activeOrders.length})</h4>
+                {activeOrders.length === 0 ? (
+                  <div className="empty-state">
+                    <Package size={26} />
+                    <strong>No active orders</strong>
+                    <span>All orders have been completed</span>
+                  </div>
+                ) : (
+                  <div className="active-order-rows">
+                    {activeOrders.slice(0, 5).map((order) => (
+                      <div key={order.id} className="active-order-row">
+                        <div>
+                          <b>#{order.reference}</b>
+                          <small>{order.clientName} · {money(order.totalAmount)}</small>
+                        </div>
+                        <StatusPill status={order.status} />
+                      </div>
+                    ))}
+                    {activeOrders.length > 5 && (
+                      <div className="view-more">
+                        <small>View all {activeOrders.length} active orders</small>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Panel>
             <div className="leakage-strip"><div><span className="tiny-label">The point of the network</span><h3>Less leakage. More life in the places we share.</h3></div><div className="leakage-stats"><div><small>Corporate leakage</small><strong>{money(data.corporateLeakage)}</strong></div><ArrowRight size={20} /><div><small>Service reinvestment</small><strong className="green-text">{money(data.serviceReinvestment)}</strong></div></div></div>
             <div className="admin-control-grid">
               <StockPanel items={Array.isArray(catalog.data) ? catalog.data : []} />
