@@ -66,10 +66,21 @@ export const ordersTable = pgTable("orders", {
     .notNull()
     .references(() => hubsTable.id),
   agentId: integer("agent_id").references(() => usersTable.id),
+  warehouseId: integer("warehouse_id").references(() => warehousesTable.id),
   orderSource: text("order_source").notNull(),
   status: text("status").notNull().default("PENDING"),
   totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
+  items: text("items").notNull().default("[]"),
+  clientAddress: text("client_address"),
+  clientPhone: text("client_phone"),
+  hubConfirmedAt: timestamp("hub_confirmed_at", { withTimezone: true }),
+  warehouseNotifiedAt: timestamp("warehouse_notified_at", { withTimezone: true }),
+  warehousePickedAt: timestamp("warehouse_picked_at", { withTimezone: true }),
+  agentNotifiedAt: timestamp("agent_notified_at", { withTimezone: true }),
+  agentPickedAt: timestamp("agent_picked_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const analyticsLogsTable = pgTable("analytics_logs", {
@@ -78,6 +89,27 @@ export const analyticsLogsTable = pgTable("analytics_logs", {
   metricValue: numeric("metric_value", { precision: 12, scale: 2 }).notNull(),
   metadata: text("metadata").notNull().default("{}"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const notificationsTable = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  orderId: integer("order_id").references(() => ordersTable.id),
+  read: text("read").notNull().default("false"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const deliveryTrackingTable = pgTable("delivery_tracking", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => ordersTable.id),
+  agentId: integer("agent_id").notNull().references(() => usersTable.id),
+  latitude: numeric("latitude", { precision: 10, scale: 6 }),
+  longitude: numeric("longitude", { precision: 10, scale: 6 }),
+  status: text("status").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const hubsRelations = relations(hubsTable, ({ many }) => ({
@@ -89,10 +121,30 @@ export const hubsRelations = relations(hubsTable, ({ many }) => ({
 export const usersRelations = relations(usersTable, ({ many, one }) => ({
   hub: one(hubsTable, { fields: [usersTable.hubId], references: [hubsTable.id] }),
   sessions: many(authSessionsTable),
+  notifications: many(notificationsTable),
 }));
 
 export const authSessionsRelations = relations(authSessionsTable, ({ one }) => ({
   user: one(usersTable, { fields: [authSessionsTable.userId], references: [usersTable.id] }),
+}));
+
+export const ordersRelations = relations(ordersTable, ({ one, many }) => ({
+  client: one(usersTable, { fields: [ordersTable.clientId], references: [usersTable.id] }),
+  hub: one(hubsTable, { fields: [ordersTable.hubId], references: [hubsTable.id] }),
+  agent: one(usersTable, { fields: [ordersTable.agentId], references: [usersTable.id] }),
+  warehouse: one(warehousesTable, { fields: [ordersTable.warehouseId], references: [warehousesTable.id] }),
+  notifications: many(notificationsTable),
+  tracking: many(deliveryTrackingTable),
+}));
+
+export const notificationsRelations = relations(notificationsTable, ({ one }) => ({
+  user: one(usersTable, { fields: [notificationsTable.userId], references: [usersTable.id] }),
+  order: one(ordersTable, { fields: [notificationsTable.orderId], references: [ordersTable.id] }),
+}));
+
+export const deliveryTrackingRelations = relations(deliveryTrackingTable, ({ one }) => ({
+  order: one(ordersTable, { fields: [deliveryTrackingTable.orderId], references: [ordersTable.id] }),
+  agent: one(usersTable, { fields: [deliveryTrackingTable.agentId], references: [usersTable.id] }),
 }));
 
 export const insertHubSchema = createInsertSchema(hubsTable).omit({ id: true });
@@ -101,6 +153,8 @@ export const insertWarehouseSchema = createInsertSchema(warehousesTable).omit({ 
 export const insertInventorySchema = createInsertSchema(inventoryTable).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(ordersTable).omit({ id: true, createdAt: true });
 export const insertAnalyticsLogSchema = createInsertSchema(analyticsLogsTable).omit({ id: true, createdAt: true });
+export const insertNotificationSchema = createInsertSchema(notificationsTable).omit({ id: true, createdAt: true });
+export const insertDeliveryTrackingSchema = createInsertSchema(deliveryTrackingTable).omit({ id: true, timestamp: true });
 
 export type Hub = z.infer<typeof insertHubSchema>;
 export type User = z.infer<typeof insertUserSchema>;
@@ -108,3 +162,5 @@ export type Warehouse = z.infer<typeof insertWarehouseSchema>;
 export type InventoryItem = z.infer<typeof insertInventorySchema>;
 export type Order = z.infer<typeof insertOrderSchema>;
 export type AnalyticsLog = z.infer<typeof insertAnalyticsLogSchema>;
+export type Notification = z.infer<typeof insertNotificationSchema>;
+export type DeliveryTracking = z.infer<typeof insertDeliveryTrackingSchema>;

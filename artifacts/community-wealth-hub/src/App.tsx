@@ -3,15 +3,18 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import {
   Activity,
+  AlertCircle,
   ArrowLeft,
   ArrowDownRight,
   ArrowRight,
   BadgeCheck,
   BarChart3,
+  Barcode,
   Bell,
   Bike,
   Boxes,
   Check,
+  CheckCircle,
   ChevronDown,
   CircleAlert,
   Clock3,
@@ -26,6 +29,7 @@ import {
   Menu,
   MessageCircle,
   Minus,
+  Navigation,
   Package,
   PanelLeft,
   Phone,
@@ -38,11 +42,12 @@ import {
   SlidersHorizontal,
   Sparkles,
   Store,
+  Trash,
   Truck,
+  Upload,
   Users,
   WalletCards,
   X,
-  Trash,
   Zap,
 } from 'lucide-react';
 import {
@@ -752,23 +757,818 @@ function OrdersPage() {
   const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 30_000 } });
   const updateStatus = useUpdateOrderStatus();
   const [filter, setFilter] = useState('all');
-  const statuses = ['all', 'received', 'packing', 'ready', 'out for delivery', 'delivered'];
+  const [confirmingOrder, setConfirmingOrder] = useState<Order | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
+  
+  const statuses = ['all', 'pending', 'ready', 'hub_confirmed', 'warehouse_picked', 'agent_picked', 'delivered'];
   const safeOrders = Array.isArray(orders.data) ? orders.data : [];
   const rows = safeOrders.filter((order) => filter === 'all' || order.status.toLowerCase() === filter);
+  
   const moveOrder = (order: Order) => {
-    const sequence = ['received', 'packing', 'ready', 'out for delivery', 'delivered'];
-    const next = sequence[Math.min(sequence.indexOf(order.status.toLowerCase()) + 1, sequence.length - 1)] ?? 'packing';
+    const sequence = ['pending', 'ready', 'hub_confirmed', 'warehouse_picked', 'agent_picked', 'delivered'];
+    const next = sequence[Math.min(sequence.indexOf(order.status.toLowerCase()) + 1, sequence.length - 1)] ?? 'ready';
     updateStatus.mutate({ orderId: order.id, data: { status: next } }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() }) });
   };
-  return <AppShell role="hub" eyebrow="Hub operations · Live queue" title="Keep the line moving."><div className="page-actions"><div className="filter-tabs">{statuses.map((item) => <button className={filter === item ? 'active' : ''} key={item} onClick={() => setFilter(item)} data-testid={`button-filter-${item.replaceAll(' ', '-')}`}>{item}<span>{item === 'all' ? orders.data?.length ?? 0 : (orders.data ?? []).filter((order) => order.status.toLowerCase() === item).length}</span></button>)}</div><button className="button button-secondary" onClick={() => orders.refetch()} data-testid="button-refresh-orders"><RefreshCw size={15} /> Refresh queue</button></div><div className="queue-layout"><Panel className="queue-panel"><div className="panel-head"><div><span className="tiny-label">Today · {rows.length} orders</span><h2>Fulfillment queue</h2></div><div className="queue-legend"><span><i className="dot dot-web" /> Web</span><span><i className="dot dot-wa" /> WhatsApp</span></div></div><QueryState loading={orders.isLoading} error={orders.isError} empty={!rows.length} onRetry={() => orders.refetch()}><div className="order-table"><div className="order-table-head"><span>Order</span><span>Client & address</span><span>Items</span><span>Amount</span><span>Status</span><span /></div>{rows.map((order) => <div className="order-row" key={order.id} data-testid={`row-order-${order.id}`}><div><b>{order.reference}</b><small><i className={`dot ${order.orderSource === 'whatsapp' ? 'dot-wa' : 'dot-web'}`} /> {order.orderSource} · {shortDate(order.createdAt)}</small></div><div><b>{order.clientName}</b><small>{order.address}</small></div><div><b>{order.itemCount} items</b><small>{order.lines.slice(0, 2).map((line) => line.itemName).join(', ')}</small></div><div><b>{money(order.totalAmount)}</b><small>{order.hubName}</small></div><div><StatusPill status={order.status} /></div><div><button className="row-action" onClick={() => moveOrder(order)} disabled={updateStatus.isPending || order.status.toLowerCase() === 'delivered'} data-testid={`button-advance-order-${order.id}`}>{order.status.toLowerCase() === 'delivered' ? <Check size={16} /> : <ArrowRight size={16} />}</button></div></div>)}</div></QueryState></Panel><Panel className="queue-side"><span className="tiny-label">At a glance</span><h3>What needs attention?</h3><div className="attention-item"><span className="attention-icon amber"><Clock3 size={16} /></span><div><b>{(orders.data ?? []).filter((order) => order.status.toLowerCase() === 'received').length} new orders</b><small>Ready to be picked up by the packing team.</small></div></div><div className="attention-item"><span className="attention-icon coral"><Truck size={16} /></span><div><b>{(orders.data ?? []).filter((order) => order.status.toLowerCase().includes('delivery')).length} on the road</b><small>Delivery agents are carrying value home.</small></div></div><div className="queue-note"><MessageCircle size={17} /><span>WhatsApp orders are parsed into the same queue. Nothing gets lost between channels.</span></div></Panel></div></AppShell>;
+  
+  const handleConfirmOrder = async (order: Order) => {
+    setConfirmingOrder(order);
+  };
+  
+  const confirmOrderAction = async () => {
+    if (!confirmingOrder) return;
+    
+    setConfirmLoading(true);
+    setErrorMessage(null);
+    
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const url = apiUrl ? `${apiUrl}/api/orders/${confirmingOrder.id}/confirm` : `/api/orders/${confirmingOrder.id}/confirm`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: apiUrl ? 'include' : 'include',
+        headers: { 'content-type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to confirm order');
+      }
+      
+      setSuccessMessage(`Order ${confirmingOrder.reference} confirmed and warehouse notified`);
+      setConfirmingOrder(null);
+      queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
+      
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (error) {
+      setErrorMessage('Failed to confirm order. Please try again.');
+      setTimeout(() => setErrorMessage(null), 5000);
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+  
+  const getStatusColor = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'pending') return 'amber';
+    if (s === 'ready') return 'blue';
+    if (s === 'hub_confirmed') return 'green';
+    if (s === 'warehouse_picked') return 'purple';
+    if (s === 'agent_picked') return 'cyan';
+    if (s === 'delivered') return 'green';
+    return 'gray';
+  };
+  
+  const getStatusLabel = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'pending') return 'Pending';
+    if (s === 'ready') return 'Ready';
+    if (s === 'hub_confirmed') return 'Hub Confirmed';
+    if (s === 'warehouse_picked') return 'Warehouse Picked';
+    if (s === 'agent_picked') return 'Agent Picked';
+    if (s === 'delivered') return 'Delivered';
+    return status;
+  };
+  
+  const getOrderTimeline = (order: Order) => {
+    const timeline = [
+      { label: 'Order Created', timestamp: order.createdAt, icon: ShoppingCart, completed: true },
+      { label: 'Payment Confirmed', timestamp: (order as any).paymentConfirmedAt, icon: CreditCard, completed: !!(order as any).paymentConfirmedAt },
+      { label: 'Hub Confirmed', timestamp: (order as any).hubConfirmedAt, icon: CheckCircle, completed: !!(order as any).hubConfirmedAt },
+      { label: 'Warehouse Notified', timestamp: (order as any).warehouseNotifiedAt, icon: Bell, completed: !!(order as any).warehouseNotifiedAt },
+      { label: 'Warehouse Picked', timestamp: (order as any).warehousePickedAt, icon: Boxes, completed: !!(order as any).warehousePickedAt },
+      { label: 'Agent Pickup', timestamp: (order as any).agentPickedAt, icon: Truck, completed: !!(order as any).agentPickedAt },
+      { label: 'Delivered', timestamp: (order as any).deliveredAt, icon: Check, completed: !!(order as any).deliveredAt },
+    ];
+    return timeline;
+  };
+  return <AppShell role="hub" eyebrow="Hub operations · Live queue" title="Keep the line moving.">
+    {successMessage && <div className="toast toast-success" data-testid="toast-success"><Check size={16} /><span>{successMessage}</span></div>}
+    {errorMessage && <div className="toast toast-error" data-testid="toast-error"><AlertCircle size={16} /><span>{errorMessage}</span></div>}
+    
+    <div className="page-actions">
+      <div className="filter-tabs">
+        {statuses.map((item) => <button className={filter === item ? 'active' : ''} key={item} onClick={() => setFilter(item)} data-testid={`button-filter-${item.replaceAll(' ', '-')}`}>
+          {item === 'all' ? 'All' : getStatusLabel(item)}
+          <span>{item === 'all' ? orders.data?.length ?? 0 : (orders.data ?? []).filter((order) => order.status.toLowerCase() === item).length}</span>
+        </button>)}
+      </div>
+      <button className="button button-secondary" onClick={() => orders.refetch()} data-testid="button-refresh-orders"><RefreshCw size={15} /> Refresh queue</button>
+    </div>
+    
+    <div className="queue-layout">
+      <Panel className="queue-panel">
+        <div className="panel-head">
+          <div>
+            <span className="tiny-label">Today · {rows.length} orders</span>
+            <h2>Fulfillment queue</h2>
+          </div>
+          <div className="queue-legend">
+            <span><i className="dot dot-web" /> Web</span>
+            <span><i className="dot dot-wa" /> WhatsApp</span>
+          </div>
+        </div>
+        
+        <QueryState loading={orders.isLoading} error={orders.isError} empty={!rows.length} onRetry={() => orders.refetch()}>
+          <div className="order-table">
+            <div className="order-table-head">
+              <span>Order</span>
+              <span>Client & address</span>
+              <span>Items</span>
+              <span>Amount</span>
+              <span>Status</span>
+              <span />
+            </div>
+            
+            {rows.map((order) => <div className="order-row" key={order.id} data-testid={`row-order-${order.id}`}>
+              <div>
+                <b>{order.reference}</b>
+                <small><i className={`dot ${order.orderSource === 'whatsapp' ? 'dot-wa' : 'dot-web'}`} /> {order.orderSource} · {shortDate(order.createdAt)}</small>
+              </div>
+              <div>
+                <b>{order.clientName}</b>
+                <small>{order.address}</small>
+                {(order as any).clientPhone && <small className="phone-display"><Phone size={12} /> {(order as any).clientPhone}</small>}
+              </div>
+              <div>
+                <b>{order.itemCount} items</b>
+                <small>{order.lines.slice(0, 2).map((line) => line.itemName).join(', ')}</small>
+              </div>
+              <div>
+                <b>{money(order.totalAmount)}</b>
+                <small>{order.hubName}</small>
+              </div>
+              <div>
+                <span className={`status-badge ${getStatusColor(order.status)}`} data-testid={`status-${order.status.toLowerCase()}`}>
+                  {getStatusLabel(order.status)}
+                </span>
+                {order.status.toLowerCase() === 'hub_confirmed' && <span className="warehouse-badge" data-testid="warehouse-notified-badge"><Bell size={10} /> Warehouse Notified</span>}
+              </div>
+              <div className="order-actions">
+                {order.status.toLowerCase() === 'ready' && (
+                  <button className="button button-primary button-small" onClick={() => handleConfirmOrder(order)} data-testid={`button-confirm-order-${order.id}`}>
+                    <Check size={14} /> Confirm
+                  </button>
+                )}
+                <button className="icon-button" onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)} data-testid={`button-expand-order-${order.id}`}>
+                  {expandedOrder === order.id ? <ChevronDown size={16} /> : <ArrowDownRight size={16} />}
+                </button>
+              </div>
+            </div>)}
+          </div>
+        </QueryState>
+      </Panel>
+    </div>
+    
+    {confirmingOrder && <div className="modal-backdrop" data-testid="confirm-modal">
+      <div className="modal confirm-modal">
+        <div className="modal-head">
+          <div>
+            <span className="tiny-label">Confirm Order</span>
+            <h3>Ready to notify warehouse?</h3>
+          </div>
+          <button className="icon-button" onClick={() => setConfirmingOrder(null)} data-testid="button-close-confirm-modal"><X size={18} /></button>
+        </div>
+        
+        <div className="confirm-details">
+          <div className="confirm-detail-row">
+            <span className="detail-label">Order Reference</span>
+            <strong>{confirmingOrder.reference}</strong>
+          </div>
+          <div className="confirm-detail-row">
+            <span className="detail-label">Client</span>
+            <strong>{confirmingOrder.clientName}</strong>
+          </div>
+          <div className="confirm-detail-row">
+            <span className="detail-label">Address</span>
+            <strong>{confirmingOrder.address}</strong>
+          </div>
+          <div className="confirm-detail-row">
+            <span className="detail-label">Phone</span>
+            <strong>{(confirmingOrder as any).clientPhone || 'N/A'}</strong>
+          </div>
+          <div className="confirm-detail-row">
+            <span className="detail-label">Total Amount</span>
+            <strong>{money(confirmingOrder.totalAmount)}</strong>
+          </div>
+          
+          <div className="confirm-items">
+            <span className="detail-label">Items</span>
+            <div className="confirm-items-list">
+              {confirmingOrder.lines.map((line, idx) => <div key={idx} className="confirm-item">
+                <span>{line.itemName} ({line.packageSize})</span>
+                <strong>×{line.quantity}</strong>
+              </div>)}
+            </div>
+          </div>
+        </div>
+        
+        <div className="modal-actions">
+          <button className="button button-secondary" onClick={() => setConfirmingOrder(null)} disabled={confirmLoading}>Cancel</button>
+          <button className="button button-primary" onClick={confirmOrderAction} disabled={confirmLoading} data-testid="button-confirm-action">
+            {confirmLoading ? 'Confirming...' : 'Confirm & Notify Warehouse'}
+          </button>
+        </div>
+      </div>
+    </div>}
+    
+    {expandedOrder && <div className="order-detail-panel" data-testid={`order-detail-${expandedOrder}`}>
+      {(() => {
+        const order = safeOrders.find(o => o.id === expandedOrder);
+        if (!order) return null;
+        
+        const timeline = getOrderTimeline(order);
+        
+        return <div className="order-detail-content">
+          <div className="detail-header">
+            <div>
+              <span className="tiny-label">Order Details</span>
+              <h3>{order.reference}</h3>
+            </div>
+            <button className="icon-button" onClick={() => setExpandedOrder(null)}><X size={18} /></button>
+          </div>
+          
+          <div className="detail-section">
+            <h4>Order Timeline</h4>
+            <div className="timeline">
+              {timeline.map((step, idx) => {
+                const Icon = step.icon;
+                return <div key={idx} className={`timeline-step ${step.completed ? 'completed' : 'pending'}`}>
+                  <div className="timeline-icon">{step.completed ? <Icon size={16} /> : <Clock3 size={16} />}</div>
+                  <div className="timeline-content">
+                    <span className="timeline-label">{step.label}</span>
+                    {step.timestamp && <span className="timeline-time">{shortDate(step.timestamp)}</span>}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+          
+          <div className="detail-section">
+            <h4>Order Items</h4>
+            <div className="detail-items">
+              {order.lines.map((line, idx) => <div key={idx} className="detail-item">
+                <span>{line.itemName} ({line.packageSize})</span>
+                <div>
+                  <strong>×{line.quantity}</strong>
+                  <small>{money(line.unitPrice * line.quantity)}</small>
+                </div>
+              </div>)}
+            </div>
+          </div>
+          
+          <div className="detail-section">
+            <h4>Delivery Information</h4>
+            <div className="detail-info">
+              <div><span className="info-label">Client</span><strong>{order.clientName}</strong></div>
+              <div><span className="info-label">Address</span><strong>{order.address}</strong></div>
+              {(order as any).clientPhone && <div><span className="info-label">Phone</span><strong>{(order as any).clientPhone}</strong></div>}
+              <div><span className="info-label">Hub</span><strong>{order.hubName}</strong></div>
+            </div>
+          </div>
+        </div>;
+      })()}
+    </div>}
+  </AppShell>;
 }
 
 function DeliveriesPage() {
   const deliveries = useListDeliveries({ query: { queryKey: getListDeliveriesQueryKey(), refetchInterval: 30_000 } });
+  const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 30_000 } });
   const updateDelivery = useUpdateDeliveryStatus();
-  const active = deliveries.data ?? [];
-  const confirm = (delivery: Delivery) => updateDelivery.mutate({ deliveryId: delivery.id, data: { status: delivery.status.toLowerCase().includes('pickup') ? 'in transit' : 'delivered' } }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListDeliveriesQueryKey() }) });
-  return <AppShell role="agent" eyebrow="Delivery desk · Elsies River" title="Your route, at a glance."><div className="route-banner"><div className="route-number">03</div><div><span className="tiny-label">Tuesday route</span><h2>Small distances. Big difference.</h2><p>Every doorstep is a household choosing to keep value circulating here.</p></div><div className="route-progress"><div><strong>{active.filter((item) => item.status.toLowerCase() === 'delivered').length}</strong><span>of {active.length || 0} stops</span></div><div className="progress-track"><span style={{ width: `${active.length ? (active.filter((item) => item.status.toLowerCase() === 'delivered').length / active.length) * 100 : 0}%` }} /></div></div></div><div className="delivery-layout"><Panel className="delivery-list"><div className="panel-head"><div><span className="tiny-label">Assigned to you</span><h2>Today's drops</h2></div><button className="button button-secondary" onClick={() => deliveries.refetch()} data-testid="button-refresh-deliveries"><RefreshCw size={15} /> Refresh</button></div><QueryState loading={deliveries.isLoading} error={deliveries.isError} empty={!active.length} onRetry={() => deliveries.refetch()}><div className="delivery-cards">{active.map((delivery, index) => <DeliveryCard key={delivery.id} delivery={delivery} index={index} onConfirm={() => confirm(delivery)} pending={updateDelivery.isPending} />)}</div></QueryState></Panel><Panel className="route-side"><span className="tiny-label">Route note</span><h3>Carry the care with you.</h3><p>Your pickup point is the hub that knows this neighborhood best. Call ahead if a household is not reachable.</p><div className="route-contact"><span className="avatar">ER</span><div><b>Elsies River Hub</b><small>14th Avenue · Open until 18:00</small></div><a className="icon-button" href="tel:+27210000000" data-testid="button-call-hub"><Phone size={16} /></a></div><div className="route-detail"><MapPin size={16} /><span>All stops are within a 4.2 km local radius.</span></div></Panel></div></AppShell>;
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  
+  // State for new delivery agent dashboard
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [trackingActive, setTrackingActive] = useState(false);
+  const [activeDelivery, setActiveDelivery] = useState<Delivery | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<'warehouse_pickup' | 'en_route' | 'near_destination' | 'delivered'>('warehouse_pickup');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const [notification, setNotification] = useState<{ message: string; visible: boolean } | null>(null);
+  
+  const activeDeliveries = deliveries.data ?? [];
+  const allOrders = Array.isArray(orders.data) ? orders.data : [];
+  
+  // Filter orders ready for pickup (WAREHOUSE_PICKED status)
+  const availableOrders = allOrders.filter(order => order.status === 'WAREHOUSE_PICKED');
+  
+  // Filter orders assigned to current agent (AGENT_PICKED status)
+  const myDeliveries = allOrders.filter(order => order.status === 'AGENT_PICKED');
+  
+  // Completed deliveries
+  const completedDeliveries = activeDeliveries.filter(d => d.status.toLowerCase() === 'delivered');
+  
+  // Get current GPS location
+  const getCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setToast({ message: 'Could not get location. Please enable GPS.', type: 'error' });
+        }
+      );
+    }
+  };
+  
+  // Start location tracking during delivery
+  useEffect(() => {
+    let trackingInterval: NodeJS.Timeout;
+    
+    if (trackingActive && activeDelivery) {
+      trackingInterval = setInterval(() => {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const location = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
+              setCurrentLocation(location);
+              
+              // Send tracking update to API
+              const apiUrl = import.meta.env.VITE_API_URL || '';
+              if (apiUrl) {
+                fetch(`${apiUrl}/api/orders/${activeDelivery.id}/tracking`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    latitude: location.lat,
+                    longitude: location.lng,
+                    status: deliveryStatus
+                  })
+                }).catch(err => console.error('Tracking update failed:', err));
+              }
+            },
+            (error) => console.error('Tracking error:', error)
+          );
+        }
+      }, 30000); // Update every 30 seconds
+    }
+    
+    return () => {
+      if (trackingInterval) clearInterval(trackingInterval);
+    };
+  }, [trackingActive, activeDelivery, deliveryStatus]);
+  
+  // Show notification when new orders become available
+  useEffect(() => {
+    if (availableOrders.length > 0 && !notification?.visible) {
+      setNotification({
+        message: `${availableOrders.length} new order${availableOrders.length > 1 ? 's' : ''} ready for pickup`,
+        visible: true
+      });
+      
+      setTimeout(() => {
+        setNotification(null);
+      }, 5000);
+    }
+  }, [availableOrders.length]);
+  
+  // Pick up order from warehouse
+  const handlePickupOrder = async (order: Order) => {
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    
+    try {
+      if (apiUrl) {
+        const response = await fetch(`${apiUrl}/api/orders/${order.id}/pickup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+          setToast({ message: 'Order picked up successfully!', type: 'success' });
+          queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
+        } else {
+          throw new Error('Pickup failed');
+        }
+      } else {
+        // Demo mode - simulate pickup
+        setToast({ message: 'Order picked up successfully!', type: 'success' });
+        queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
+      }
+    } catch (error) {
+      setToast({ message: 'Failed to pick up order. Please try again.', type: 'error' });
+    }
+  };
+  
+  // Start delivery
+  const handleStartDelivery = (order: Order) => {
+    const delivery = activeDeliveries.find(d => d.orderReference === order.reference);
+    if (delivery) {
+      setActiveDelivery(delivery);
+      setDeliveryStatus('en_route');
+      setTrackingActive(true);
+      getCurrentLocation();
+      setToast({ message: 'Delivery started. Tracking active.', type: 'success' });
+    }
+  };
+  
+  // Mark order as delivered
+  const handleMarkDelivered = async (order: Order) => {
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    
+    try {
+      if (apiUrl) {
+        const response = await fetch(`${apiUrl}/api/orders/${order.id}/deliver`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            latitude: currentLocation?.lat || 0,
+            longitude: currentLocation?.lng || 0
+          })
+        });
+        
+        if (response.ok) {
+          setDeliveryStatus('delivered');
+          setTrackingActive(false);
+          setActiveDelivery(null);
+          setToast({ message: 'Order delivered successfully!', type: 'success' });
+          queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListDeliveriesQueryKey() });
+        } else {
+          throw new Error('Delivery update failed');
+        }
+      } else {
+        // Demo mode - simulate delivery
+        setDeliveryStatus('delivered');
+        setTrackingActive(false);
+        setActiveDelivery(null);
+        setToast({ message: 'Order delivered successfully!', type: 'success' });
+        queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
+      }
+    } catch (error) {
+      setToast({ message: 'Failed to mark as delivered. Please try again.', type: 'error' });
+    }
+  };
+  
+  // Calculate earnings (placeholder)
+  const earnings = completedDeliveries.length * 25; // R25 per delivery
+  
+  return (
+    <AppShell role="agent" eyebrow="Delivery desk · Elsies River" title="Your route, at a glance.">
+      {/* Notification Toast */}
+      {notification && (
+        <div className="notification-toast" data-testid="notification-toast">
+          <Bell size={16} />
+          <span>{notification.message}</span>
+          <button onClick={() => setNotification(null)}><X size={14} /></button>
+        </div>
+      )}
+      
+      {/* Toast Message */}
+      {toast && (
+        <div className={`toast-message toast-${toast.type}`} data-testid="toast-message">
+          {toast.type === 'success' && <CheckCircle size={16} />}
+          {toast.type === 'error' && <AlertCircle size={16} />}
+          {toast.type === 'info' && <Bell size={16} />}
+          <span>{toast.message}</span>
+          <button onClick={() => setToast(null)}><X size={14} /></button>
+        </div>
+      )}
+      
+      {/* Summary Cards */}
+      <div className="metric-grid">
+        <Metric 
+          label="Available Orders" 
+          value={String(availableOrders.length)} 
+          note="Ready for pickup" 
+          icon={Package} 
+          accent="sun" 
+        />
+        <Metric 
+          label="In Progress" 
+          value={String(myDeliveries.length)} 
+          note="Active deliveries" 
+          icon={Bike} 
+          accent="mint" 
+        />
+        <Metric 
+          label="Completed Today" 
+          value={String(completedDeliveries.length)} 
+          note="Deliveries finished" 
+          icon={CheckCircle} 
+          accent="coral" 
+        />
+        <Metric 
+          label="Earnings" 
+          value={money(earnings)} 
+          note="Today's total" 
+          icon={WalletCards} 
+          accent="blue" 
+        />
+      </div>
+      
+      {/* Main Delivery Dashboard Layout */}
+      <div className="delivery-dashboard-layout">
+        {/* Left Panel: Available Orders */}
+        <Panel className="available-orders-panel">
+          <div className="panel-head">
+            <div>
+              <span className="tiny-label">Warehouse Queue</span>
+              <h2>Available Orders</h2>
+            </div>
+            <button 
+              className="button button-secondary" 
+              onClick={() => orders.refetch()}
+              data-testid="button-refresh-orders"
+            >
+              <RefreshCw size={15} /> Refresh
+            </button>
+          </div>
+          
+          <div className="warehouse-info">
+            <MapPin size={16} />
+            <span>Warehouse: Elsies River Hub, 14th Avenue</span>
+          </div>
+          
+          <QueryState 
+            loading={orders.isLoading} 
+            error={orders.isError} 
+            empty={!availableOrders.length} 
+            onRetry={() => orders.refetch()}
+          >
+            <div className="available-orders-list">
+              {availableOrders.map((order) => (
+                <article className="order-card" key={order.id} data-testid={`card-order-${order.id}`}>
+                  <div className="order-card-head">
+                    <div>
+                      <span className="tiny-label">{order.reference}</span>
+                      <h3>{order.clientName}</h3>
+                    </div>
+                    <StatusPill status={order.status} />
+                  </div>
+                  
+                  <div className="order-details">
+                    <div>
+                      <small>Address</small>
+                      <b>{order.address}</b>
+                    </div>
+                    <div>
+                      <small>Items</small>
+                      <b>{order.itemCount}</b>
+                    </div>
+                    <div>
+                      <small>Total</small>
+                      <b>{money(order.totalAmount)}</b>
+                    </div>
+                  </div>
+                  
+                  <div className="order-pickup-info">
+                    <Clock3 size={14} />
+                    <span>Est. pickup: 15 min</span>
+                  </div>
+                  
+                  <button 
+                    className="button button-primary button-wide"
+                    onClick={() => handlePickupOrder(order)}
+                    data-testid={`button-pickup-${order.id}`}
+                  >
+                    <Package size={15} /> Pick Up
+                  </button>
+                </article>
+              ))}
+            </div>
+          </QueryState>
+        </Panel>
+        
+        {/* Right Panel: Active Delivery with Tracking */}
+        <Panel className="active-delivery-panel">
+          <div className="panel-head">
+            <div>
+              <span className="tiny-label">Current Delivery</span>
+              <h2>My Deliveries</h2>
+            </div>
+            {trackingActive && (
+              <div className="tracking-indicator" data-testid="tracking-indicator">
+                <span className="live-pulse" />
+                <span>Tracking Active</span>
+              </div>
+            )}
+          </div>
+          
+          {activeDelivery ? (
+            <div className="active-delivery-content">
+              {/* Delivery Status Timeline */}
+              <div className="delivery-timeline">
+                <div className={`timeline-step ${deliveryStatus === 'warehouse_pickup' || deliveryStatus === 'en_route' || deliveryStatus === 'near_destination' || deliveryStatus === 'delivered' ? 'completed' : ''}`}>
+                  <div className="timeline-dot"><Check size={12} /></div>
+                  <span>Warehouse Pickup</span>
+                </div>
+                <div className="timeline-line" />
+                <div className={`timeline-step ${deliveryStatus === 'en_route' || deliveryStatus === 'near_destination' || deliveryStatus === 'delivered' ? 'completed' : ''} ${deliveryStatus === 'en_route' ? 'active' : ''}`}>
+                  <div className="timeline-dot"><Navigation size={12} /></div>
+                  <span>En Route</span>
+                </div>
+                <div className="timeline-line" />
+                <div className={`timeline-step ${deliveryStatus === 'near_destination' || deliveryStatus === 'delivered' ? 'completed' : ''} ${deliveryStatus === 'near_destination' ? 'active' : ''}`}>
+                  <div className="timeline-dot"><MapPin size={12} /></div>
+                  <span>Near Destination</span>
+                </div>
+                <div className="timeline-line" />
+                <div className={`timeline-step ${deliveryStatus === 'delivered' ? 'completed' : ''} ${deliveryStatus === 'delivered' ? 'active' : ''}`}>
+                  <div className="timeline-dot"><CheckCircle size={12} /></div>
+                  <span>Delivered</span>
+                </div>
+              </div>
+              
+              {/* Current Location Display */}
+              {currentLocation && (
+                <div className="location-display" data-testid="location-display">
+                  <MapPin size={16} />
+                  <span>
+                    {currentLocation.lat.toFixed(6)}, {currentLocation.lng.toFixed(6)}
+                  </span>
+                </div>
+              )}
+              
+              {/* Delivery Details */}
+              <div className="delivery-details-card">
+                <div className="delivery-details-head">
+                  <div>
+                    <span className="tiny-label">{activeDelivery.orderReference}</span>
+                    <h3>{activeDelivery.dropoff}</h3>
+                  </div>
+                  <StatusPill status={activeDelivery.status} />
+                </div>
+                
+                <div className="delivery-route-info">
+                  <div>
+                    <small>Pickup</small>
+                    <b>{activeDelivery.pickup}</b>
+                  </div>
+                  <ArrowRight size={15} />
+                  <div>
+                    <small>Drop-off</small>
+                    <b>{activeDelivery.dropoff}</b>
+                  </div>
+                </div>
+                
+                {/* Map Placeholder */}
+                <div className="map-placeholder" data-testid="map-placeholder">
+                  <MapPin size={32} />
+                  <span>Map View</span>
+                  <small>Route visualization</small>
+                </div>
+                
+                {/* ETA and Distance */}
+                <div className="delivery-metrics">
+                  <div>
+                    <Clock3 size={14} />
+                    <span>ETA: {activeDelivery.eta}</span>
+                  </div>
+                  <div>
+                    <Navigation size={14} />
+                    <span>Distance: 2.4 km</span>
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="delivery-actions">
+                  {deliveryStatus === 'warehouse_pickup' && (
+                    <button 
+                      className="button button-primary button-wide"
+                      onClick={() => {
+                        setDeliveryStatus('en_route');
+                        getCurrentLocation();
+                      }}
+                      data-testid="button-start-delivery"
+                    >
+                      <Navigation size={15} /> Start Delivery
+                    </button>
+                  )}
+                  
+                  {deliveryStatus === 'en_route' && (
+                    <button 
+                      className="button button-primary button-wide"
+                      onClick={() => setDeliveryStatus('near_destination')}
+                      data-testid="button-near-destination"
+                    >
+                      <MapPin size={15} /> Near Destination
+                    </button>
+                  )}
+                  
+                  {deliveryStatus === 'near_destination' && (
+                    <button 
+                      className="button button-primary button-wide"
+                      onClick={() => {
+                        const order = allOrders.find(o => o.reference === activeDelivery.orderReference);
+                        if (order) handleMarkDelivered(order);
+                      }}
+                      data-testid="button-mark-delivered"
+                    >
+                      <CheckCircle size={15} /> Mark Delivered
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <Bike size={26} />
+              <strong>No active delivery</strong>
+              <span>Pick up an order from the warehouse to start your route.</span>
+            </div>
+          )}
+          
+          {/* My Deliveries List (when no active delivery) */}
+          {!activeDelivery && myDeliveries.length > 0 && (
+            <div className="my-deliveries-list">
+              <h3>Assigned Orders</h3>
+              {myDeliveries.map((order) => (
+                <article className="order-card" key={order.id} data-testid={`card-my-order-${order.id}`}>
+                  <div className="order-card-head">
+                    <div>
+                      <span className="tiny-label">{order.reference}</span>
+                      <h3>{order.clientName}</h3>
+                    </div>
+                    <StatusPill status={order.status} />
+                  </div>
+                  
+                  <div className="order-details">
+                    <div>
+                      <small>Address</small>
+                      <b>{order.address}</b>
+                    </div>
+                    <div>
+                      <small>Items</small>
+                      <b>{order.itemCount}</b>
+                    </div>
+                  </div>
+                  
+                  <button 
+                    className="button button-primary button-wide"
+                    onClick={() => handleStartDelivery(order)}
+                    data-testid={`button-start-delivery-${order.id}`}
+                  >
+                    <Navigation size={15} /> Start Delivery
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+      
+      {/* Bottom Panel: Completed Deliveries History */}
+      <Panel className="completed-deliveries-panel">
+        <div className="panel-head">
+          <div>
+            <span className="tiny-label">Delivery History</span>
+            <h2>Completed Deliveries</h2>
+          </div>
+        </div>
+        
+        {completedDeliveries.length > 0 ? (
+          <div className="completed-deliveries-list">
+            {completedDeliveries.map((delivery) => (
+              <article className="completed-delivery-card" key={delivery.id} data-testid={`card-completed-${delivery.id}`}>
+                <div className="completed-delivery-head">
+                  <div>
+                    <span className="tiny-label">{delivery.orderReference}</span>
+                    <h3>{delivery.dropoff}</h3>
+                  </div>
+                  <StatusPill status={delivery.status} />
+                </div>
+                
+                <div className="completed-delivery-details">
+                  <div>
+                    <small>Delivered at</small>
+                    <b>{delivery.eta}</b>
+                  </div>
+                  <div>
+                    <small>Client Rating</small>
+                    <b>⭐⭐⭐⭐⭐</b>
+                  </div>
+                </div>
+                
+                <button 
+                  className="button button-secondary"
+                  data-testid={`button-view-details-${delivery.id}`}
+                >
+                  View Details
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <CheckCircle size={26} />
+            <strong>No completed deliveries today</strong>
+            <span>Completed deliveries will appear here.</span>
+          </div>
+        )}
+      </Panel>
+    </AppShell>
+  );
 }
 
 function DeliveryCard({ delivery, index, onConfirm, pending }: { delivery: Delivery; index: number; onConfirm: () => void; pending: boolean }) {
@@ -937,6 +1737,30 @@ function ZonesPage() {
 // Warehouse Manager Inventory Page
 function InventoryPage() {
   const catalog = useListCatalog({ query: { queryKey: getListCatalogQueryKey(), staleTime: 60_000 } });
+  const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 30_000 } });
+
+  // State for inventory management
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('All');
+  const [sortColumn, setSortColumn] = useState<'name' | 'category' | 'stock' | 'updated'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
+  // State for file upload
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSummary, setUploadSummary] = useState<{ added: number; updated: number; errors: number } | null>(null);
+  
+  // State for scanner input
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerCode, setScannerCode] = useState('');
+  const [scannerName, setScannerName] = useState('');
+  const [scannerQuantity, setScannerQuantity] = useState('');
+  const [scannerPackageSize, setScannerPackageSize] = useState('');
+  const [scannerCategory, setScannerCategory] = useState('Staples');
+  const [scannerActivity, setScannerActivity] = useState<Array<{ code: string; name: string; quantity: number; timestamp: string }>>([]);
+  
+  // State for orders
+  const [processedOrders, setProcessedOrders] = useState<number[]>([]);
 
   // Use dummy data if API is not available
   const dummyCatalog: CatalogItem[] = [
@@ -950,52 +1774,375 @@ function InventoryPage() {
     { id: 8, name: "Rooibos Tea", category: "Beverages", packageSize: "80 bags", communityPrice: 42.99, retailPrice: 54.99, savingsPercent: 22, stockQuantity: 67, imageKey: "tea", popular: false },
   ];
 
+  const dummyOrders: Order[] = [
+    { id: 1, reference: "CWH-1001", clientName: "Thabo Mokoena", clientPhone: "+27821234567", hubName: "Elsies River Hub", address: "45 Avon Street, Elsies River", orderSource: "WEB_APP", status: "PENDING", paymentMethod: "PAYMERCH", paymentStatus: "PAID", totalAmount: 89.97, itemCount: 3, createdAt: new Date().toISOString(), lines: [{ itemName: "Long Grain Rice", packageSize: "1kg", quantity: 2, unitPrice: 21.99 }, { itemName: "Cooking Oil", packageSize: "750ml", quantity: 1, unitPrice: 29.99 }] },
+    { id: 2, reference: "CWH-1002", clientName: "Sarah Nkosi", clientPhone: "+27829876543", hubName: "Elsies River Hub", address: "12 Pine Road, Elsies River", orderSource: "whatsapp", status: "PENDING", paymentMethod: "PAYSHAP", paymentStatus: "PAID", totalAmount: 54.48, itemCount: 2, createdAt: new Date(Date.now() - 3600000).toISOString(), lines: [{ itemName: "Maize Meal", packageSize: "2.5kg", quantity: 1, unitPrice: 38.5 }, { itemName: "Sugar", packageSize: "1kg", quantity: 1, unitPrice: 18.5 }] },
+  ];
+
   const items = Array.isArray(catalog.data) && catalog.data.length > 0 ? catalog.data : dummyCatalog;
+  const safeOrders = Array.isArray(orders.data) && orders.data.length > 0 ? orders.data : dummyOrders;
+  const pendingOrders = safeOrders.filter(order => order.status === 'PENDING' && !processedOrders.includes(order.id));
+  
   const lowStock = items.filter(item => item.stockQuantity < 50);
   const totalStock = items.reduce((sum, item) => sum + item.stockQuantity, 0);
+  const categories = ['All', ...Array.from(new Set(items.map((item) => item.category)))];
+
+  // Filter and sort items
+  const filteredItems = items
+    .filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          item.category.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = filterCategory === 'All' || item.category === filterCategory;
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => {
+      let comparison = 0;
+      if (sortColumn === 'name') comparison = a.name.localeCompare(b.name);
+      else if (sortColumn === 'category') comparison = a.category.localeCompare(b.category);
+      else if (sortColumn === 'stock') comparison = a.stockQuantity - b.stockQuantity;
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+  // Handle file upload
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadStatus('uploading');
+    setUploadProgress(0);
+
+    // Simulate upload progress
+    const interval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setUploadStatus('success');
+          setUploadSummary({ added: 5, updated: 3, errors: 0 });
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 200);
+  };
+
+  // Handle scanner input
+  const handleScannerSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!scannerCode || !scannerName || !scannerQuantity) return;
+
+    const quantity = parseInt(scannerQuantity, 10);
+    const activity = {
+      code: scannerCode,
+      name: scannerName,
+      quantity,
+      timestamp: new Date().toLocaleTimeString()
+    };
+
+    setScannerActivity(prev => [activity, ...prev].slice(0, 5));
+    setScannerCode('');
+    setScannerName('');
+    setScannerQuantity('');
+    setScannerPackageSize('');
+    setScannerOpen(false);
+  };
+
+  // Handle order processing
+  const handleProcessOrder = (orderId: number) => {
+    setProcessedOrders(prev => [...prev, orderId]);
+  };
+
+  // Get stock level color
+  const getStockLevelColor = (quantity: number) => {
+    if (quantity < 30) return 'red';
+    if (quantity < 70) return 'amber';
+    return 'green';
+  };
 
   return <AppShell role="warehouse" eyebrow="Warehouse · Inventory" title="Manage stock levels.">
+    {/* Summary Cards */}
     <div className="inventory-summary">
       <div className="summary-card">
-        <span className="summary-label">Total Items</span>
-        <strong className="summary-value">{items.length}</strong>
+        <Package size={20} className="summary-icon" />
+        <div>
+          <span className="summary-label">Total Items</span>
+          <strong className="summary-value">{items.length}</strong>
+        </div>
       </div>
       <div className="summary-card">
-        <span className="summary-label">Total Stock</span>
-        <strong className="summary-value">{totalStock.toLocaleString()}</strong>
+        <Boxes size={20} className="summary-icon" />
+        <div>
+          <span className="summary-label">Total Stock</span>
+          <strong className="summary-value">{totalStock.toLocaleString()}</strong>
+        </div>
       </div>
       <div className="summary-card warning">
-        <span className="summary-label">Low Stock Items</span>
-        <strong className="summary-value">{lowStock.length}</strong>
+        <AlertCircle size={20} className="summary-icon" />
+        <div>
+          <span className="summary-label">Low Stock</span>
+          <strong className="summary-value">{lowStock.length}</strong>
+        </div>
+      </div>
+      <div className="summary-card">
+        <ShoppingCart size={20} className="summary-icon" />
+        <div>
+          <span className="summary-label">Pending Orders</span>
+          <strong className="summary-value">{pendingOrders.length}</strong>
+        </div>
       </div>
     </div>
-    <Panel className="inventory-panel">
-      <div className="panel-head">
-        <div>
-          <span className="tiny-label">Warehouse inventory</span>
-          <h3>Stock levels</h3>
-        </div>
-        <button className="button button-secondary" onClick={() => catalog.refetch()}>
-          <RefreshCw size={15} /> Refresh
-        </button>
+
+    {/* Action Buttons */}
+    <div className="inventory-actions">
+      <button className="button button-secondary" onClick={() => document.getElementById('file-upload')?.click()}>
+        <Upload size={16} /> Upload Excel/CSV
+      </button>
+      <input
+        id="file-upload"
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        style={{ display: 'none' }}
+        onChange={handleFileUpload}
+      />
+      <button className="button button-secondary" onClick={() => setScannerOpen(true)}>
+        <Barcode size={16} /> Scanner Input
+      </button>
+      <button className="button button-secondary" onClick={() => catalog.refetch()}>
+        <RefreshCw size={16} /> Refresh Inventory
+      </button>
+    </div>
+
+    {/* Upload Status */}
+    {uploadStatus !== 'idle' && (
+      <div className={`upload-status ${uploadStatus}`}>
+        {uploadStatus === 'uploading' && (
+          <div>
+            <span>Uploading... {uploadProgress}%</span>
+            <div className="progress-bar"><span style={{ width: `${uploadProgress}%` }} /></div>
+          </div>
+        )}
+        {uploadStatus === 'success' && uploadSummary && (
+          <div>
+            <CheckCircle size={16} />
+            <span>Upload complete: {uploadSummary.added} added, {uploadSummary.updated} updated, {uploadSummary.errors} errors</span>
+            <button className="icon-button" onClick={() => setUploadStatus('idle')}><X size={14} /></button>
+          </div>
+        )}
+        {uploadStatus === 'error' && (
+          <div>
+            <AlertCircle size={16} />
+            <span>Upload failed. Please try again.</span>
+            <button className="icon-button" onClick={() => setUploadStatus('idle')}><X size={14} /></button>
+          </div>
+        )}
       </div>
-      <QueryState loading={catalog.isLoading} error={catalog.isError} empty={!items.length} onRetry={() => catalog.refetch()}>
-        <div className="inventory-list">
-          {items.map((item) => (
-            <div key={item.id} className={`inventory-row ${item.stockQuantity < 50 ? 'low-stock' : ''}`}>
-              <div>
-                <b>{item.name}</b>
-                <small>{item.category} · {item.packageSize}</small>
-              </div>
-              <div className="stock-info">
-                <span className="stock-quantity">{item.stockQuantity}</span>
-                <span className="stock-status">{item.stockQuantity < 50 ? 'Low' : 'OK'}</span>
-              </div>
+    )}
+
+    {/* Scanner Modal */}
+    {scannerOpen && (
+      <div className="modal-backdrop">
+        <div className="modal scanner-modal">
+          <div className="modal-head">
+            <div>
+              <span className="tiny-label">Quick add</span>
+              <h3>Scanner Input</h3>
             </div>
-          ))}
+            <button className="icon-button" onClick={() => setScannerOpen(false)}><X size={18} /></button>
+          </div>
+          <form onSubmit={handleScannerSubmit}>
+            <label>
+              Barcode / QR Code
+              <input
+                value={scannerCode}
+                onChange={(e) => setScannerCode(e.target.value)}
+                placeholder="Scan or enter code"
+                autoFocus
+              />
+            </label>
+            <label>
+              Item Name
+              <input
+                value={scannerName}
+                onChange={(e) => setScannerName(e.target.value)}
+                placeholder="Enter item name"
+              />
+            </label>
+            <div className="form-row">
+              <label>
+                Quantity
+                <input
+                  type="number"
+                  value={scannerQuantity}
+                  onChange={(e) => setScannerQuantity(e.target.value)}
+                  placeholder="0"
+                  min="1"
+                />
+              </label>
+              <label>
+                Package Size
+                <input
+                  value={scannerPackageSize}
+                  onChange={(e) => setScannerPackageSize(e.target.value)}
+                  placeholder="e.g., 1kg"
+                />
+              </label>
+            </div>
+            <label>
+              Category
+              <select value={scannerCategory} onChange={(e) => setScannerCategory(e.target.value)}>
+                {categories.filter(c => c !== 'All').map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </label>
+            <div className="form-actions">
+              <button type="button" className="button button-secondary" onClick={() => setScannerOpen(false)}>Cancel</button>
+              <button type="submit" className="button button-primary">Add to Inventory</button>
+            </div>
+          </form>
+          {scannerActivity.length > 0 && (
+            <div className="scanner-activity">
+              <span className="tiny-label">Recent activity</span>
+              {scannerActivity.map((activity, index) => (
+                <div key={index} className="activity-item">
+                  <CheckCircle size={14} />
+                  <span>{activity.name} ({activity.quantity}) - {activity.timestamp}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </QueryState>
-    </Panel>
+      </div>
+    )}
+
+    {/* Main Content Grid */}
+    <div className="inventory-grid">
+      {/* Inventory Table */}
+      <Panel className="inventory-table-panel">
+        <div className="panel-head">
+          <div>
+            <span className="tiny-label">Warehouse inventory</span>
+            <h3>Stock levels</h3>
+          </div>
+          <div className="table-controls">
+            <input
+              className="search-input"
+              placeholder="Search items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <QueryState loading={catalog.isLoading} error={catalog.isError} empty={!filteredItems.length} onRetry={() => catalog.refetch()}>
+          <div className="inventory-table">
+            <div className="table-header">
+              <button onClick={() => { setSortColumn('name'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                Item Name {sortColumn === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+              <button onClick={() => { setSortColumn('category'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                Category {sortColumn === 'category' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+              <button onClick={() => { setSortColumn('stock'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                Package Size {sortColumn === 'stock' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+              <button onClick={() => { setSortColumn('stock'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                Stock Quantity {sortColumn === 'stock' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </button>
+              <span>Status</span>
+              <span>Last Updated</span>
+            </div>
+            <div className="table-body">
+              {filteredItems.map((item) => (
+                <div key={item.id} className="table-row">
+                  <div>
+                    <b>{item.name}</b>
+                  </div>
+                  <div>{item.category}</div>
+                  <div>{item.packageSize}</div>
+                  <div className={`stock-cell ${getStockLevelColor(item.stockQuantity)}`}>
+                    <strong>{item.stockQuantity}</strong>
+                  </div>
+                  <div>
+                    <span className={`status-pill ${getStockLevelColor(item.stockQuantity)}`}>
+                      <span className="status-dot" />
+                      {item.stockQuantity < 30 ? 'Low' : item.stockQuantity < 70 ? 'Medium' : 'High'}
+                    </span>
+                  </div>
+                  <div>{shortDate(new Date().toISOString())}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </QueryState>
+      </Panel>
+
+      {/* Pending Orders Panel */}
+      <Panel className="orders-panel">
+        <div className="panel-head">
+          <div>
+            <span className="tiny-label">Hub orders</span>
+            <h3>Pending Orders</h3>
+          </div>
+          <ShoppingCart size={17} />
+        </div>
+        {pendingOrders.length === 0 ? (
+          <div className="empty-state">
+            <CheckCircle size={26} />
+            <strong>All caught up</strong>
+            <span>No pending orders to process</span>
+          </div>
+        ) : (
+          <div className="orders-list">
+            {pendingOrders.map((order) => (
+              <div key={order.id} className="order-card">
+                <div className="order-card-head">
+                  <div>
+                    <span className="tiny-label">{order.reference}</span>
+                    <h4>{order.clientName}</h4>
+                  </div>
+                  <StatusPill status={order.status} />
+                </div>
+                <div className="order-details">
+                  <div>
+                    <small>Items</small>
+                    <b>{order.itemCount} items</b>
+                  </div>
+                  <div>
+                    <small>Total</small>
+                    <b>{money(order.totalAmount)}</b>
+                  </div>
+                </div>
+                <div className="order-items">
+                  {order.lines.slice(0, 3).map((line, idx) => (
+                    <small key={idx}>{line.itemName} x{line.quantity}</small>
+                  ))}
+                  {order.lines.length > 3 && <small>+{order.lines.length - 3} more</small>}
+                </div>
+                <button
+                  className="button button-primary button-wide"
+                  onClick={() => handleProcessOrder(order.id)}
+                >
+                  <CheckCircle size={14} /> Ready for Pickup
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {processedOrders.length > 0 && (
+          <div className="processed-orders">
+            <span className="tiny-label">Processed today</span>
+            <div className="processed-count">
+              <CheckCircle size={16} />
+              <span>{processedOrders.length} orders ready for pickup</span>
+            </div>
+          </div>
+        )}
+      </Panel>
+    </div>
   </AppShell>;
 }
 
