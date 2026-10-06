@@ -104,19 +104,21 @@ const DEMO_SESSION_KEY = 'cwh-demo-session';
 
 function getDemoUsers(): DemoUser[] {
   if (typeof window === 'undefined') return [];
+
+  const defaultUsers: DemoUser[] = [
+    { id: 1, email: 'admin@comhub.co.za', password: 'Kamphata@2023', fullName: 'Super Admin', role: 'SUPER_ADMIN', phoneNumber: '' },
+    { id: 2, email: 'hub@comhub.co.za', password: 'Kamphata@2023', fullName: 'Hub Admin', role: 'HUB_ADMIN', phoneNumber: '+27123456789' },
+    { id: 3, email: 'warehouse@comhub.co.za', password: 'Kamphata@2023', fullName: 'Warehouse Manager', role: 'WAREHOUSE_MANAGER', phoneNumber: '+27123456788' },
+    { id: 4, email: 'agent@comhub.co.za', password: 'Kamphata@2023', fullName: 'Delivery Agent', role: 'DELIVERY_AGENT', phoneNumber: '+27123456787' },
+  ];
+
   const stored = localStorage.getItem(DEMO_USERS_KEY);
-  if (!stored) {
-    // Initialize with default users
-    const defaultUsers: DemoUser[] = [
-      { id: 1, email: 'admin@comhub.co.za', password: 'Kamphata@2023', fullName: 'Super Admin', role: 'SUPER_ADMIN', phoneNumber: '' },
-      { id: 2, email: 'hub@comhub.co.za', password: 'hub123', fullName: 'Hub Manager', role: 'HUB_ADMIN', phoneNumber: '+27123456789' },
-      { id: 3, email: 'agent@comhub.co.za', password: 'agent123', fullName: 'Delivery Agent', role: 'DELIVERY_AGENT', phoneNumber: '+27123456788' },
-      { id: 4, email: 'client@comhub.co.za', password: 'client123', fullName: 'Community Client', role: 'CLIENT', phoneNumber: '+27123456787' },
-    ];
-    localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(defaultUsers));
-    return defaultUsers;
-  }
-  return JSON.parse(stored);
+  const registeredUsers: DemoUser[] = stored ? JSON.parse(stored) : [];
+  const seededEmails = new Set(defaultUsers.map((user) => user.email));
+  const clientUsers = registeredUsers.filter((user) => !seededEmails.has(user.email));
+  const users = [...defaultUsers, ...clientUsers];
+  localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(users));
+  return users;
 }
 
 function saveDemoUsers(users: DemoUser[]) {
@@ -198,46 +200,13 @@ async function authRequest(path: string, options?: RequestInit) {
         const body = JSON.parse(options?.body as string || '{}');
         console.log('Login attempt:', body.email);
         
-        // Hardcoded admin credentials
-        if (body.email === 'admin@comhub.co.za' && body.password === 'Kamphata@2023') {
-          const adminUser: DemoUser = {
-            id: 1,
-            email: body.email,
-            password: body.password,
-            fullName: 'Super Admin',
-            role: 'SUPER_ADMIN',
-            phoneNumber: ''
-          };
-          setCurrentSession(adminUser);
-          return { user: {
-            id: adminUser.id,
-            name: adminUser.fullName,
-            fullName: adminUser.fullName,
-            email: adminUser.email,
-            phoneNumber: adminUser.phoneNumber,
-            role: adminUser.role,
-            hubId: null
-          } };
-        }
-        
-        // Any other credentials work as community client
         const users = getDemoUsers();
-        let user = users.find(u => u.email === body.email);
-        
-        if (!user) {
-          // Create new user if doesn't exist
-          user = {
-            id: Math.max(...users.map(u => u.id), 0) + 1,
-            email: body.email,
-            password: body.password,
-            fullName: body.email?.split('@')[0] || 'User',
-            role: 'CLIENT',
-            phoneNumber: ''
-          };
-          users.push(user);
-          saveDemoUsers(users);
+        const user = users.find((candidate) => candidate.email.toLowerCase() === String(body.email || '').trim().toLowerCase());
+
+        if (!user || user.password !== body.password) {
+          throw new Error('Invalid email or password');
         }
-        
+
         setCurrentSession(user);
         return { user: {
           id: user.id,
