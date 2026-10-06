@@ -111,7 +111,8 @@ function getDemoUsers(): DemoUser[] {
       { id: 1, email: 'admin@comhub.co.za', password: 'Kamphata@2023', fullName: 'Super Admin', role: 'SUPER_ADMIN', phoneNumber: '' },
       { id: 2, email: 'hub@comhub.co.za', password: 'hub123', fullName: 'Hub Manager', role: 'HUB_ADMIN', phoneNumber: '+27123456789' },
       { id: 3, email: 'agent@comhub.co.za', password: 'agent123', fullName: 'Delivery Agent', role: 'DELIVERY_AGENT', phoneNumber: '+27123456788' },
-      { id: 4, email: 'client@comhub.co.za', password: 'client123', fullName: 'Community Client', role: 'CLIENT', phoneNumber: '+27123456787' },
+      { id: 4, email: 'warehouse@comhub.co.za', password: 'warehouse123', fullName: 'Warehouse Manager', role: 'WAREHOUSE_MANAGER', phoneNumber: '+27123456786' },
+      { id: 5, email: 'client@comhub.co.za', password: 'client123', fullName: 'Community Client', role: 'CLIENT', phoneNumber: '+27123456787' },
     ];
     localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(defaultUsers));
     return defaultUsers;
@@ -169,7 +170,12 @@ function useAdminAuth() {
   if (user?.role !== 'SUPER_ADMIN') {
     throw new Error('Admin access required');
   }
-  return context;
+  return {
+    getUsers: context.getUsers,
+    deleteUser: context.deleteUser,
+    createUser: context.register,
+    resetPassword: context.resetPassword
+  };
 }
 
 async function authRequest(path: string, options?: RequestInit) {
@@ -220,37 +226,29 @@ async function authRequest(path: string, options?: RequestInit) {
           } };
         }
         
-        // Any other credentials work as community client
+        // Check against demo users list with password validation
         const users = getDemoUsers();
-        let user = users.find(u => u.email === body.email);
+        const user = users.find(u => u.email === body.email && u.password === body.password);
         
-        if (!user) {
-          // Create new user if doesn't exist
-          user = {
-            id: Math.max(...users.map(u => u.id), 0) + 1,
-            email: body.email,
-            password: body.password,
-            fullName: body.email?.split('@')[0] || 'User',
-            role: 'CLIENT',
-            phoneNumber: ''
-          };
-          users.push(user);
-          saveDemoUsers(users);
+        if (user) {
+          console.log('User found:', user.fullName, 'with role:', user.role);
+          setCurrentSession(user);
+          return { user: {
+            id: user.id,
+            name: user.fullName,
+            fullName: user.fullName,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            role: user.role,
+            hubId: null
+          } };
         }
         
-        setCurrentSession(user);
-        return { user: {
-          id: user.id,
-          name: user.fullName,
-          fullName: user.fullName,
-          email: user.email,
-          phoneNumber: user.phoneNumber,
-          role: user.role,
-          hubId: null
-        } };
+        console.log('User not found or invalid password for:', body.email);
+        throw new Error('Invalid email or password');
       } catch (e) {
         console.error('Login error:', e);
-        throw new Error('Invalid request');
+        throw new Error('Invalid email or password');
       }
     }
     
@@ -330,7 +328,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
         fullName,
-        role,
+        role: role as AuthRole,
         phoneNumber
       };
       users.push(newUser);
@@ -349,6 +347,14 @@ function AuthProvider({ children }: { children: ReactNode }) {
     deleteUser: (id) => {
       const users = getDemoUsers().filter(u => u.id !== id);
       saveDemoUsers(users);
+    },
+    resetPassword: (id: number, newPassword: string) => {
+      const users = getDemoUsers();
+      const userIndex = users.findIndex(u => u.id === id);
+      if (userIndex !== -1) {
+        users[userIndex].password = newPassword;
+        saveDemoUsers(users);
+      }
     }
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -369,9 +375,27 @@ const navGroups = [
     { href: '/inventory', label: 'Inventory', icon: Boxes, role: 'warehouse' as Role },
     { href: '/command', label: 'Command centre', icon: LayoutDashboard, role: 'super' as Role },
   ] },
+  { label: 'My Orders', items: [
+    { href: '/orders', label: 'Order Status', icon: Package, role: 'client' as Role },
+    { href: '/deliveries', label: 'Delivery Status', icon: Bike, role: 'client' as Role },
+  ] },
+  { label: 'Warehouse', items: [
+    { href: '/inventory', label: 'Inventory', icon: Boxes, role: 'warehouse' as Role },
+    { href: '/orders', label: 'Pack Orders', icon: Package, role: 'warehouse' as Role },
+  ] },
+  { label: 'Hub Operations', items: [
+    { href: '/orders', label: 'Order Queue', icon: Package, role: 'hub' as Role },
+    { href: '/deliveries', label: 'Delivery Tracking', icon: Bike, role: 'hub' as Role },
+  ] },
+  { label: 'Deliveries', items: [
+    { href: '/deliveries', label: 'My Deliveries', icon: Bike, role: 'agent' as Role },
+  ] },
   { label: 'Network', items: [
     { href: '/pricing', label: 'Pricing controls', icon: SlidersHorizontal, role: 'super' as Role },
     { href: '/zones', label: 'Ward coverage', icon: MapPin, role: 'super' as Role },
+  ] },
+  { label: 'Administration', items: [
+    { href: '/users', label: 'User Management', icon: Users, role: 'super' as Role },
   ] },
 ];
 
@@ -396,7 +420,10 @@ function intendedRole(): Role {
 }
 
 function workspacePath(role: AuthRole) {
-  return role === 'SUPER_ADMIN' ? '/command' : role === 'HUB_ADMIN' ? '/orders' : role === 'DELIVERY_AGENT' ? '/deliveries' : role === 'WAREHOUSE_MANAGER' ? '/orders' : '/shop';
+  console.log('workspacePath called with role:', role);
+  const path = role === 'SUPER_ADMIN' ? '/command' : role === 'HUB_ADMIN' ? '/orders' : role === 'DELIVERY_AGENT' ? '/deliveries' : role === 'WAREHOUSE_MANAGER' ? '/inventory' : '/shop';
+  console.log('workspacePath returning:', path);
+  return path;
 }
 
 function money(value: number) {
@@ -469,11 +496,35 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
   const currentRole = roles.find((item) => item.id === role) ?? roles[3];
   const isClient = user?.role === 'CLIENT';
   const visibleGroups = isClient
-    ? [{ label: 'Community', items: [
-      { href: '/shop', label: 'Shop', icon: ShoppingBasket, role: 'client' as Role },
-      { href: '/orders', label: 'Order status', icon: Package, role: 'client' as Role },
-      { href: '/deliveries', label: 'Delivery status', icon: Bike, role: 'client' as Role },
-    ] }]
+    ? [
+        { label: 'Shop', items: [
+          { href: '/shop', label: 'Shop', icon: ShoppingBasket, role: 'client' as Role },
+        ] },
+        { label: 'My Orders', items: [
+          { href: '/orders', label: 'Order Status', icon: Package, role: 'client' as Role },
+          { href: '/deliveries', label: 'Delivery Status', icon: Bike, role: 'client' as Role },
+        ] },
+      ]
+    : role === 'hub'
+    ? [
+        { label: 'Hub Operations', items: [
+          { href: '/orders', label: 'Order Queue', icon: Package, role: 'hub' as Role },
+          { href: '/deliveries', label: 'Delivery Tracking', icon: Bike, role: 'hub' as Role },
+        ] },
+      ]
+    : role === 'warehouse'
+    ? [
+        { label: 'Warehouse', items: [
+          { href: '/inventory', label: 'Inventory', icon: Boxes, role: 'warehouse' as Role },
+          { href: '/orders', label: 'Pack Orders', icon: Package, role: 'warehouse' as Role },
+        ] },
+      ]
+    : role === 'agent'
+    ? [
+        { label: 'Deliveries', items: [
+          { href: '/deliveries', label: 'My Deliveries', icon: Bike, role: 'agent' as Role },
+        ] },
+      ]
     : navGroups.filter((group) => group.items.some((item) => item.role === role));
 
   // Mobile bottom navigation items
@@ -491,7 +542,7 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
     : role === 'warehouse'
     ? [
         { href: '/inventory', label: 'Inventory', icon: Boxes },
-        { href: '/orders', label: 'Orders', icon: Package },
+        { href: '/orders', label: 'Pack Orders', icon: Package },
       ]
     : role === 'agent'
     ? [
@@ -501,6 +552,7 @@ function AppShell({ children, role = 'super', title, eyebrow }: { children: Reac
         { href: '/command', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/pricing', label: 'Pricing', icon: SlidersHorizontal },
         { href: '/zones', label: 'Zones', icon: MapPin },
+        { href: '/users', label: 'Users', icon: Users },
       ];
 
   useEffect(() => {
@@ -709,23 +761,9 @@ function ShopPage() {
     
     // Simulate payment processing
     if (paymentMethod === 'CARD') {
-      // Simulate card payment processing
-      const cardNumber = prompt('Enter card number (simulated):', '4242 4242 4242 4242');
-      const expiry = prompt('Enter expiry (MM/YY):', '12/25');
-      const cvv = prompt('Enter CVV:', '123');
-      
-      if (!cardNumber || !expiry || !cvv) {
-        alert('Payment details required');
-        return;
-      }
-      
-      // Simulate payment approval
-      if (Math.random() > 0.1) { // 90% success rate
-        alert('Payment approved! Order placed successfully.');
-      } else {
-        alert('Payment declined. Please try another payment method.');
-        return;
-      }
+      // Simulate card payment processing (auto-approve for demo)
+      // In production, this would show a proper payment modal
+      console.log('Card payment simulated - auto-approved');
     }
     
     const orderData = {
@@ -846,8 +884,14 @@ function OrdersPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
   
+  const dummyOrders: Order[] = [
+    { id: 1, reference: "CWH-1001", clientName: "Thabo Mokoena", clientPhone: "+27821234567", hubName: "Elsies River Hub", address: "45 Avon Street, Elsies River", orderSource: "WEB_APP", status: "HUB_CONFIRMED", paymentMethod: "PAYMERCH", paymentStatus: "PAID", totalAmount: 89.97, itemCount: 3, createdAt: new Date().toISOString(), lines: [{ itemName: "Long Grain Rice", packageSize: "1kg", quantity: 2, unitPrice: 21.99 }, { itemName: "Cooking Oil", packageSize: "750ml", quantity: 1, unitPrice: 29.99 }] },
+    { id: 2, reference: "CWH-1002", clientName: "Sarah Nkosi", clientPhone: "+27829876543", hubName: "Elsies River Hub", address: "12 Pine Road, Elsies River", orderSource: "whatsapp", status: "PENDING", paymentMethod: "PAYSHAP", paymentStatus: "PAID", totalAmount: 54.48, itemCount: 2, createdAt: new Date(Date.now() - 3600000).toISOString(), lines: [{ itemName: "Maize Meal", packageSize: "2.5kg", quantity: 1, unitPrice: 38.5 }, { itemName: "Sugar", packageSize: "1kg", quantity: 1, unitPrice: 18.5 }] },
+    { id: 3, reference: "CWH-1003", clientName: "John Dlamini", clientPhone: "+27823456789", hubName: "Elsies River Hub", address: "78 Oak Street, Elsies River", orderSource: "WEB_APP", status: "WAREHOUSE_PICKED", paymentMethod: "PAYMERCH", paymentStatus: "PAID", totalAmount: 125.50, itemCount: 4, createdAt: new Date(Date.now() - 7200000).toISOString(), lines: [{ itemName: "Rice", packageSize: "1kg", quantity: 2, unitPrice: 21.99 }, { itemName: "Bread", packageSize: "700g", quantity: 2, unitPrice: 14.99 }] },
+  ];
+  
   const statuses = ['all', 'pending', 'ready', 'hub_confirmed', 'warehouse_picked', 'agent_picked', 'delivered'];
-  const safeOrders = Array.isArray(orders.data) ? orders.data : [];
+  const safeOrders = Array.isArray(orders.data) && orders.data.length > 0 ? orders.data : dummyOrders;
   const rows = safeOrders.filter((order) => filter === 'all' || order.status.toLowerCase() === filter);
   
   const moveOrder = (order: Order) => {
@@ -935,7 +979,7 @@ function OrdersPage() {
       <div className="filter-tabs">
         {statuses.map((item) => <button className={filter === item ? 'active' : ''} key={item} onClick={() => setFilter(item)} data-testid={`button-filter-${item.replaceAll(' ', '-')}`}>
           {item === 'all' ? 'All' : getStatusLabel(item)}
-          <span>{item === 'all' ? orders.data?.length ?? 0 : (orders.data ?? []).filter((order) => order.status.toLowerCase() === item).length}</span>
+          <span>{item === 'all' ? (Array.isArray(orders.data) ? orders.data.length : 0) : (Array.isArray(orders.data) ? orders.data.filter((order) => order.status.toLowerCase() === item).length : 0)}</span>
         </button>)}
       </div>
       <button className="button button-secondary" onClick={() => orders.refetch()} data-testid="button-refresh-orders"><RefreshCw size={15} /> Refresh queue</button>
@@ -1132,8 +1176,18 @@ function DeliveriesPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [notification, setNotification] = useState<{ message: string; visible: boolean } | null>(null);
   
-  const activeDeliveries = deliveries.data ?? [];
-  const allOrders = Array.isArray(orders.data) ? orders.data : [];
+  const dummyDeliveries: Delivery[] = [
+    { id: 1, orderReference: "CWH-1001", agentId: 1, agentName: "Agent Mike", status: "DELIVERED", dropoff: "45 Avon Street, Elsies River", eta: "10:30 AM", distance: "2.3 km" },
+    { id: 2, orderReference: "CWH-1002", agentId: 1, agentName: "Agent Mike", status: "EN_ROUTE", dropoff: "12 Pine Road, Elsies River", eta: "11:15 AM", distance: "3.1 km" },
+  ];
+  
+  const dummyOrders: Order[] = [
+    { id: 1, reference: "CWH-1001", clientName: "Thabo Mokoena", clientPhone: "+27821234567", hubName: "Elsies River Hub", address: "45 Avon Street, Elsies River", orderSource: "WEB_APP", status: "WAREHOUSE_PICKED", paymentMethod: "PAYMERCH", paymentStatus: "PAID", totalAmount: 89.97, itemCount: 3, createdAt: new Date().toISOString(), lines: [{ itemName: "Long Grain Rice", packageSize: "1kg", quantity: 2, unitPrice: 21.99 }, { itemName: "Cooking Oil", packageSize: "750ml", quantity: 1, unitPrice: 29.99 }] },
+    { id: 2, reference: "CWH-1002", clientName: "Sarah Nkosi", clientPhone: "+27829876543", hubName: "Elsies River Hub", address: "12 Pine Road, Elsies River", orderSource: "whatsapp", status: "WAREHOUSE_PICKED", paymentMethod: "PAYSHAP", paymentStatus: "PAID", totalAmount: 54.48, itemCount: 2, createdAt: new Date(Date.now() - 3600000).toISOString(), lines: [{ itemName: "Maize Meal", packageSize: "2.5kg", quantity: 1, unitPrice: 38.5 }, { itemName: "Sugar", packageSize: "1kg", quantity: 1, unitPrice: 18.5 }] },
+  ];
+  
+  const activeDeliveries = Array.isArray(deliveries.data) && deliveries.data.length > 0 ? deliveries.data : dummyDeliveries;
+  const allOrders = Array.isArray(orders.data) && orders.data.length > 0 ? orders.data : dummyOrders;
   
   // Filter orders ready for pickup (WAREHOUSE_PICKED status)
   const availableOrders = allOrders.filter(order => order.status === 'WAREHOUSE_PICKED');
@@ -1924,7 +1978,6 @@ function ZonesPage() {
 // Warehouse Manager Inventory Page
 function InventoryPage() {
   const catalog = useListCatalog({ query: { queryKey: getListCatalogQueryKey(), staleTime: 60_000 } });
-  const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 30_000 } });
 
   // State for inventory management
   const [searchTerm, setSearchTerm] = useState('');
@@ -1945,9 +1998,6 @@ function InventoryPage() {
   const [scannerPackageSize, setScannerPackageSize] = useState('');
   const [scannerCategory, setScannerCategory] = useState('Staples');
   const [scannerActivity, setScannerActivity] = useState<Array<{ code: string; name: string; quantity: number; timestamp: string }>>([]);
-  
-  // State for orders
-  const [processedOrders, setProcessedOrders] = useState<number[]>([]);
 
   // Use dummy data if API is not available
   const dummyCatalog: CatalogItem[] = [
@@ -1961,14 +2011,7 @@ function InventoryPage() {
     { id: 8, name: "Rooibos Tea", category: "Beverages", packageSize: "80 bags", communityPrice: 42.99, retailPrice: 54.99, savingsPercent: 22, stockQuantity: 67, imageKey: "tea", popular: false },
   ];
 
-  const dummyOrders: Order[] = [
-    { id: 1, reference: "CWH-1001", clientName: "Thabo Mokoena", clientPhone: "+27821234567", hubName: "Elsies River Hub", address: "45 Avon Street, Elsies River", orderSource: "WEB_APP", status: "PENDING", paymentMethod: "PAYMERCH", paymentStatus: "PAID", totalAmount: 89.97, itemCount: 3, createdAt: new Date().toISOString(), lines: [{ itemName: "Long Grain Rice", packageSize: "1kg", quantity: 2, unitPrice: 21.99 }, { itemName: "Cooking Oil", packageSize: "750ml", quantity: 1, unitPrice: 29.99 }] },
-    { id: 2, reference: "CWH-1002", clientName: "Sarah Nkosi", clientPhone: "+27829876543", hubName: "Elsies River Hub", address: "12 Pine Road, Elsies River", orderSource: "whatsapp", status: "PENDING", paymentMethod: "PAYSHAP", paymentStatus: "PAID", totalAmount: 54.48, itemCount: 2, createdAt: new Date(Date.now() - 3600000).toISOString(), lines: [{ itemName: "Maize Meal", packageSize: "2.5kg", quantity: 1, unitPrice: 38.5 }, { itemName: "Sugar", packageSize: "1kg", quantity: 1, unitPrice: 18.5 }] },
-  ];
-
   const items = Array.isArray(catalog.data) && catalog.data.length > 0 ? catalog.data : dummyCatalog;
-  const safeOrders = Array.isArray(orders.data) && orders.data.length > 0 ? orders.data : dummyOrders;
-  const pendingOrders = safeOrders.filter(order => order.status === 'PENDING' && !processedOrders.includes(order.id));
   
   const lowStock = items.filter(item => item.stockQuantity < 50);
   const totalStock = items.reduce((sum, item) => sum + item.stockQuantity, 0);
@@ -2033,11 +2076,6 @@ function InventoryPage() {
     setScannerOpen(false);
   };
 
-  // Handle order processing
-  const handleProcessOrder = (orderId: number) => {
-    setProcessedOrders(prev => [...prev, orderId]);
-  };
-
   // Get stock level color
   const getStockLevelColor = (quantity: number) => {
     if (quantity < 30) return 'red';
@@ -2045,315 +2083,283 @@ function InventoryPage() {
     return 'green';
   };
 
-  return <AppShell role="warehouse" eyebrow="Warehouse · Inventory" title="Manage stock levels.">
-    {/* Summary Cards */}
-    <div className="inventory-summary">
-      <div className="summary-card">
-        <Package size={20} className="summary-icon" />
-        <div>
-          <span className="summary-label">Total Items</span>
-          <strong className="summary-value">{items.length}</strong>
-        </div>
-      </div>
-      <div className="summary-card">
-        <Boxes size={20} className="summary-icon" />
-        <div>
-          <span className="summary-label">Total Stock</span>
-          <strong className="summary-value">{totalStock.toLocaleString()}</strong>
-        </div>
-      </div>
-      <div className="summary-card warning">
-        <AlertCircle size={20} className="summary-icon" />
-        <div>
-          <span className="summary-label">Low Stock</span>
-          <strong className="summary-value">{lowStock.length}</strong>
-        </div>
-      </div>
-      <div className="summary-card">
-        <ShoppingCart size={20} className="summary-icon" />
-        <div>
-          <span className="summary-label">Pending Orders</span>
-          <strong className="summary-value">{pendingOrders.length}</strong>
-        </div>
-      </div>
-    </div>
-
-    {/* Action Buttons */}
-    <div className="inventory-actions">
-      <button className="button button-secondary" onClick={() => document.getElementById('file-upload')?.click()}>
-        <Upload size={16} /> Upload Excel/CSV
-      </button>
-      <input
-        id="file-upload"
-        type="file"
-        accept=".csv,.xlsx,.xls"
-        style={{ display: 'none' }}
-        onChange={handleFileUpload}
-      />
-      <button className="button button-secondary" onClick={() => setScannerOpen(true)}>
-        <Barcode size={16} /> Scanner Input
-      </button>
-      <button className="button button-secondary" onClick={() => catalog.refetch()}>
-        <RefreshCw size={16} /> Refresh Inventory
-      </button>
-    </div>
-
-    {/* Upload Status */}
-    {uploadStatus !== 'idle' && (
-      <div className={`upload-status ${uploadStatus}`}>
-        {uploadStatus === 'uploading' && (
-          <div>
-            <span>Uploading... {uploadProgress}%</span>
-            <div className="progress-bar"><span style={{ width: `${uploadProgress}%` }} /></div>
-          </div>
-        )}
-        {uploadStatus === 'success' && uploadSummary && (
-          <div>
-            <CheckCircle size={16} />
-            <span>Upload complete: {uploadSummary.added} added, {uploadSummary.updated} updated, {uploadSummary.errors} errors</span>
-            <button className="icon-button" onClick={() => setUploadStatus('idle')}><X size={14} /></button>
-          </div>
-        )}
-        {uploadStatus === 'error' && (
-          <div>
-            <AlertCircle size={16} />
-            <span>Upload failed. Please try again.</span>
-            <button className="icon-button" onClick={() => setUploadStatus('idle')}><X size={14} /></button>
-          </div>
-        )}
-      </div>
-    )}
-
-    {/* Scanner Modal */}
-    {scannerOpen && (
-      <div className="modal-backdrop">
-        <div className="modal scanner-modal">
-          <div className="modal-head">
+  return (
+    <AppShell role="warehouse" eyebrow="Warehouse · Inventory Management" title="Stock control and restocking.">
+      <>
+        {/* Summary Cards */}
+        <div className="inventory-summary">
+          <div className="summary-card">
+            <Package size={20} className="summary-icon" />
             <div>
-              <span className="tiny-label">Quick add</span>
-              <h3>Scanner Input</h3>
+              <span className="summary-label">Total Items</span>
+              <strong className="summary-value">{items.length}</strong>
             </div>
-            <button className="icon-button" onClick={() => setScannerOpen(false)}><X size={18} /></button>
           </div>
-          <form onSubmit={handleScannerSubmit}>
-            <label>
-              Barcode / QR Code
-              <input
-                value={scannerCode}
-                onChange={(e) => setScannerCode(e.target.value)}
-                placeholder="Scan or enter code"
-                autoFocus
-              />
-            </label>
-            <label>
-              Item Name
-              <input
-                value={scannerName}
-                onChange={(e) => setScannerName(e.target.value)}
-                placeholder="Enter item name"
-              />
-            </label>
-            <div className="form-row">
-              <label>
-                Quantity
-                <input
-                  type="number"
-                  value={scannerQuantity}
-                  onChange={(e) => setScannerQuantity(e.target.value)}
-                  placeholder="0"
-                  min="1"
-                />
-              </label>
-              <label>
-                Package Size
-                <input
-                  value={scannerPackageSize}
-                  onChange={(e) => setScannerPackageSize(e.target.value)}
-                  placeholder="e.g., 1kg"
-                />
-              </label>
+          <div className="summary-card">
+            <Boxes size={20} className="summary-icon" />
+            <div>
+              <span className="summary-label">Total Stock</span>
+              <strong className="summary-value">{totalStock.toLocaleString()}</strong>
             </div>
-            <label>
-              Category
-              <select value={scannerCategory} onChange={(e) => setScannerCategory(e.target.value)}>
-                {categories.filter(c => c !== 'All').map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </label>
-            <div className="form-actions">
-              <button type="button" className="button button-secondary" onClick={() => setScannerOpen(false)}>Cancel</button>
-              <button type="submit" className="button button-primary">Add to Inventory</button>
+          </div>
+          <div className="summary-card warning">
+            <AlertCircle size={20} className="summary-icon" />
+            <div>
+              <span className="summary-label">Low Stock</span>
+              <strong className="summary-value">{lowStock.length}</strong>
             </div>
-          </form>
-          {scannerActivity.length > 0 && (
-            <div className="scanner-activity">
-              <span className="tiny-label">Recent activity</span>
-              {scannerActivity.map((activity, index) => (
-                <div key={index} className="activity-item">
-                  <CheckCircle size={14} />
-                  <span>{activity.name} ({activity.quantity}) - {activity.timestamp}</span>
-                </div>
-              ))}
+          </div>
+          <div className="summary-card info">
+            <TrendingUp size={20} className="summary-icon" />
+            <div>
+              <span className="summary-label">Categories</span>
+              <strong className="summary-value">{categories.length - 1}</strong>
             </div>
-          )}
+          </div>
         </div>
-      </div>
-    )}
 
-    {/* Main Content Grid */}
-    <div className="inventory-grid">
-      {/* Inventory Table */}
-      <Panel className="inventory-table-panel">
-        <div className="panel-head">
-          <div>
-            <span className="tiny-label">Warehouse inventory</span>
-            <h3>Stock levels</h3>
-          </div>
-          <div className="table-controls">
-            <input
-              className="search-input"
-              placeholder="Search items..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
+        {/* Action Buttons */}
+        <div className="inventory-actions">
+          <button className="button button-secondary" onClick={() => document.getElementById('file-upload')?.click()}>
+            <Upload size={16} /> Upload Excel/CSV
+          </button>
+          <input
+            id="file-upload"
+            type="file"
+            accept=".csv,.xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={handleFileUpload}
+          />
+          <button className="button button-secondary" onClick={() => setScannerOpen(true)}>
+            <Barcode size={16} /> Scanner Entry
+          </button>
+          <button className="button button-secondary" onClick={() => catalog.refetch()}>
+            <RefreshCw size={16} /> Refresh Stock
+          </button>
         </div>
-        <QueryState loading={catalog.isLoading} error={catalog.isError} empty={!filteredItems.length} onRetry={() => catalog.refetch()}>
-          <div className="inventory-table">
-            <div className="table-header">
-              <button onClick={() => { setSortColumn('name'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
-                Item Name {sortColumn === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </button>
-              <button onClick={() => { setSortColumn('category'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
-                Category {sortColumn === 'category' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </button>
-              <button onClick={() => { setSortColumn('stock'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
-                Package Size {sortColumn === 'stock' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </button>
-              <button onClick={() => { setSortColumn('stock'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
-                Stock Quantity {sortColumn === 'stock' && (sortDirection === 'asc' ? '↑' : '↓')}
-              </button>
-              <span>Status</span>
-              <span>Last Updated</span>
-            </div>
-            <div className="table-body">
-              {filteredItems.map((item) => (
-                <div key={item.id} className="table-row">
-                  <div>
-                    <b>{item.name}</b>
-                  </div>
-                  <div>{item.category}</div>
-                  <div>{item.packageSize}</div>
-                  <div className={`stock-cell ${getStockLevelColor(item.stockQuantity)}`}>
-                    <strong>{item.stockQuantity}</strong>
-                  </div>
-                  <div>
-                    <span className={`status-pill ${getStockLevelColor(item.stockQuantity)}`}>
-                      <span className="status-dot" />
-                      {item.stockQuantity < 30 ? 'Low' : item.stockQuantity < 70 ? 'Medium' : 'High'}
-                    </span>
-                  </div>
-                  <div>{shortDate(new Date().toISOString())}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </QueryState>
-      </Panel>
 
-      {/* Pending Orders Panel */}
-      <Panel className="orders-panel">
-        <div className="panel-head">
-          <div>
-            <span className="tiny-label">Hub orders</span>
-            <h3>Pending Orders</h3>
-          </div>
-          <ShoppingCart size={17} />
-        </div>
-        {pendingOrders.length === 0 ? (
-          <div className="empty-state">
-            <CheckCircle size={26} />
-            <strong>All caught up</strong>
-            <span>No pending orders to process</span>
-          </div>
-        ) : (
-          <div className="orders-list">
-            {pendingOrders.map((order) => (
-              <div key={order.id} className="order-card">
-                <div className="order-card-head">
-                  <div>
-                    <span className="tiny-label">{order.reference}</span>
-                    <h4>{order.clientName}</h4>
-                  </div>
-                  <StatusPill status={order.status} />
-                </div>
-                <div className="order-details">
-                  <div>
-                    <small>Items</small>
-                    <b>{order.itemCount} items</b>
-                  </div>
-                  <div>
-                    <small>Total</small>
-                    <b>{money(order.totalAmount)}</b>
-                  </div>
-                </div>
-                <div className="order-items">
-                  {order.lines.slice(0, 3).map((line, idx) => (
-                    <small key={idx}>{line.itemName} x{line.quantity}</small>
-                  ))}
-                  {order.lines.length > 3 && <small>+{order.lines.length - 3} more</small>}
-                </div>
-                <button
-                  className="button button-primary button-wide"
-                  onClick={() => handleProcessOrder(order.id)}
-                >
-                  <CheckCircle size={14} /> Ready for Pickup
-                </button>
+        {/* Upload Status */}
+        {uploadStatus !== 'idle' && (
+          <div className={`upload-status ${uploadStatus}`}>
+            {uploadStatus === 'uploading' && (
+              <div>
+                <span>Uploading... {uploadProgress}%</span>
+                <div className="progress-bar"><span style={{ width: `${uploadProgress}%` }} /></div>
               </div>
-            ))}
+            )}
+            {uploadStatus === 'success' && uploadSummary && (
+              <div>
+                <CheckCircle size={16} />
+                <span>Upload complete: {uploadSummary.added} added, {uploadSummary.updated} updated, {uploadSummary.errors} errors</span>
+                <button className="icon-button" onClick={() => setUploadStatus('idle')}><X size={14} /></button>
+              </div>
+            )}
+            {uploadStatus === 'error' && (
+              <div>
+                <AlertCircle size={16} />
+                <span>Upload failed. Please try again.</span>
+                <button className="icon-button" onClick={() => setUploadStatus('idle')}><X size={14} /></button>
+              </div>
+            )}
           </div>
         )}
-        {processedOrders.length > 0 && (
-          <div className="processed-orders">
-            <span className="tiny-label">Processed today</span>
-            <div className="processed-count">
-              <CheckCircle size={16} />
-              <span>{processedOrders.length} orders ready for pickup</span>
+
+        {/* Scanner Modal */}
+        {scannerOpen && (
+          <div className="modal-backdrop">
+            <div className="modal scanner-modal">
+              <div className="modal-head">
+                <div>
+                  <span className="tiny-label">Quick add</span>
+                  <h3>Scanner Input</h3>
+                </div>
+                <button className="icon-button" onClick={() => setScannerOpen(false)}><X size={18} /></button>
+              </div>
+              <form onSubmit={handleScannerSubmit}>
+                <label>
+                  Barcode / QR Code
+                  <input
+                    value={scannerCode}
+                    onChange={(e) => setScannerCode(e.target.value)}
+                    placeholder="Scan or enter code"
+                    autoFocus
+                  />
+                </label>
+                <label>
+                  Item Name
+                  <input
+                    value={scannerName}
+                    onChange={(e) => setScannerName(e.target.value)}
+                    placeholder="Enter item name"
+                  />
+                </label>
+                <div className="form-row">
+                  <label>
+                    Quantity
+                    <input
+                      type="number"
+                      value={scannerQuantity}
+                      onChange={(e) => setScannerQuantity(e.target.value)}
+                      placeholder="0"
+                      min="1"
+                    />
+                  </label>
+                  <label>
+                    Package Size
+                    <input
+                      value={scannerPackageSize}
+                      onChange={(e) => setScannerPackageSize(e.target.value)}
+                      placeholder="e.g., 1kg"
+                    />
+                  </label>
+                </div>
+                <label>
+                  Category
+                  <select value={scannerCategory} onChange={(e) => setScannerCategory(e.target.value)}>
+                    {categories.filter(c => c !== 'All').map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="form-actions">
+                  <button type="button" className="button button-secondary" onClick={() => setScannerOpen(false)}>Cancel</button>
+                  <button type="submit" className="button button-primary">Add to Inventory</button>
+                </div>
+              </form>
+              {scannerActivity.length > 0 && (
+                <div className="scanner-activity">
+                  <span className="tiny-label">Recent activity</span>
+                  {scannerActivity.map((activity, index) => (
+                    <div key={index} className="activity-item">
+                      <CheckCircle size={14} />
+                      <span>{activity.name} ({activity.quantity}) - {activity.timestamp}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
-      </Panel>
-    </div>
-  </AppShell>;
+
+        {/* Main Content Grid */}
+        <div className="inventory-grid">
+          {/* Inventory Table */}
+          <Panel className="inventory-table-panel">
+            <div className="panel-head">
+              <div>
+                <span className="tiny-label">Warehouse inventory</span>
+                <h3>Stock levels</h3>
+              </div>
+              <div className="table-controls">
+                <input
+                  className="search-input"
+                  placeholder="Search items..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <QueryState loading={catalog.isLoading} error={catalog.isError} empty={!filteredItems.length} onRetry={() => catalog.refetch()}>
+              <div className="inventory-table">
+                <div className="table-header">
+                  <button onClick={() => { setSortColumn('name'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                    Item Name {sortColumn === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </button>
+                  <button onClick={() => { setSortColumn('category'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                    Category {sortColumn === 'category' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </button>
+                  <button onClick={() => { setSortColumn('stock'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                    Package Size {sortColumn === 'stock' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </button>
+                  <button onClick={() => { setSortColumn('stock'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }}>
+                    Stock Quantity {sortColumn === 'stock' && (sortDirection === 'asc' ? '↑' : '↓')}
+                  </button>
+                  <span>Status</span>
+                  <span>Last Updated</span>
+                </div>
+                <div className="table-body">
+                  {filteredItems.map((item) => (
+                    <div key={item.id} className="table-row">
+                      <div>
+                        <b>{item.name}</b>
+                      </div>
+                      <div>{item.category}</div>
+                      <div>{item.packageSize}</div>
+                      <div className={`stock-cell ${getStockLevelColor(item.stockQuantity)}`}>
+                        <strong>{item.stockQuantity}</strong>
+                      </div>
+                      <div>
+                        <span className={`status-pill ${getStockLevelColor(item.stockQuantity)}`}>
+                          <span className="status-dot" />
+                          {item.stockQuantity < 30 ? 'Low' : item.stockQuantity < 70 ? 'Medium' : 'High'}
+                        </span>
+                      </div>
+                      <div>{shortDate(new Date().toISOString())}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </QueryState>
+          </Panel>
+        </div>
+      </>
+    </AppShell>);
 }
 
 function RoleGate({ role, children }: { role: Role; children: ReactNode }) {
   const { loading, user } = useAuth();
   const [, setLocation] = useLocation();
+  
+  useEffect(() => {
+    if (!user) {
+      setLocation('/sign-in');
+    } else {
+      const normalizedRole = user.role === 'SUPER_ADMIN' ? 'super' : user.role === 'HUB_ADMIN' ? 'hub' : user.role === 'DELIVERY_AGENT' ? 'agent' : user.role === 'WAREHOUSE_MANAGER' ? 'warehouse' : 'client';
+      console.log('RoleGate useEffect: user.role =', user.role, 'normalizedRole =', normalizedRole, 'required role =', role);
+      if (normalizedRole !== role) {
+        console.log('RoleGate: Redirecting to', workspacePath(user.role));
+        setLocation(workspacePath(user.role));
+      }
+    }
+  }, [user, role, setLocation]);
+  
   if (loading) return <div className="auth-loading"><span className="live-pulse" /> Loading workspace…</div>;
-  if (!user) {
-    setLocation('/sign-in');
-    return null;
-  }
+  if (!user) return null;
+  
   const normalizedRole = user.role === 'SUPER_ADMIN' ? 'super' : user.role === 'HUB_ADMIN' ? 'hub' : user.role === 'DELIVERY_AGENT' ? 'agent' : user.role === 'WAREHOUSE_MANAGER' ? 'warehouse' : 'client';
-  if (normalizedRole !== role) {
-    setLocation(workspacePath(user.role));
-    return null;
-  }
+  console.log('RoleGate render: user.role =', user.role, 'normalizedRole =', normalizedRole, 'required =', role, 'match =', normalizedRole === role);
+  if (normalizedRole !== role) return null;
+  
   return children;
 }
 
 function ClientOrdersPage() {
   const { user } = useAuth();
   const orders = useListOrders({ status: undefined }, { query: { queryKey: getListOrdersQueryKey(), refetchInterval: 15_000 } });
-  const safeOrders = Array.isArray(orders.data) ? orders.data : [];
+  
+  const dummyOrders: Order[] = [
+    { id: 1, reference: "CWH-1001", clientName: user?.fullName || "Client", clientPhone: "+27821234567", hubName: "Elsies River Hub", address: "45 Avon Street, Elsies River", orderSource: "WEB_APP", status: "HUB_CONFIRMED", paymentMethod: "PAYMERCH", paymentStatus: "PAID", totalAmount: 89.97, itemCount: 3, createdAt: new Date().toISOString(), lines: [{ itemName: "Long Grain Rice", packageSize: "1kg", quantity: 2, unitPrice: 21.99 }, { itemName: "Cooking Oil", packageSize: "750ml", quantity: 1, unitPrice: 29.99 }] },
+    { id: 2, reference: "CWH-1002", clientName: user?.fullName || "Client", clientPhone: "+27829876543", hubName: "Elsies River Hub", address: "12 Pine Road, Elsies River", orderSource: "whatsapp", status: "WAREHOUSE_PICKED", paymentMethod: "PAYSHAP", paymentStatus: "PAID", totalAmount: 54.48, itemCount: 2, createdAt: new Date(Date.now() - 3600000).toISOString(), lines: [{ itemName: "Maize Meal", packageSize: "2.5kg", quantity: 1, unitPrice: 38.5 }, { itemName: "Sugar", packageSize: "1kg", quantity: 1, unitPrice: 18.5 }] },
+  ];
+  
+  const safeOrders = Array.isArray(orders.data) && orders.data.length > 0 ? orders.data : dummyOrders;
   const rows = safeOrders.filter((order) => order.clientName === user?.fullName);
+  
+  const getStatusLabel = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'pending') return 'Pending';
+    if (s === 'hub_confirmed') return 'Hub Confirmed';
+    if (s === 'warehouse_picked') return 'Packed';
+    if (s === 'agent_picked') return 'Out for Delivery';
+    if (s === 'delivered') return 'Delivered';
+    return status;
+  };
+  
   return <AppShell role="client" eyebrow="Community account · Orders" title="Keep track of every basket."><Panel className="client-status-panel"><div className="panel-head"><div><span className="tiny-label">Your order queue</span><h2>Orders in motion</h2></div><button className="button button-secondary" onClick={() => orders.refetch()}><RefreshCw size={15} /> Refresh</button></div><QueryState loading={orders.isLoading} error={orders.isError} empty={!rows.length} onRetry={() => orders.refetch()}><div className="client-order-list">{rows.map((order) => <div className="client-order-row" key={order.id}><div><b>{order.reference}</b><small>{shortDate(order.createdAt)} · {order.itemCount} items</small></div><strong>{money(order.totalAmount)}</strong><StatusPill status={order.status} /></div>)}</div></QueryState></Panel></AppShell>;
 }
 
@@ -2397,9 +2403,236 @@ function WorkspaceRoute({ role, clientPage, children }: { role: Role; clientPage
   return <RoleGate role={role}>{children}</RoleGate>;
 }
 
+function UserManagementPage() {
+  const { getUsers, deleteUser, createUser, resetPassword } = useAdminAuth();
+  const [users, setUsers] = useState<DemoUser[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<DemoUser | null>(null);
+  const [newUser, setNewUser] = useState({ fullName: '', email: '', phoneNumber: '', password: '', role: 'CLIENT' as AuthRole });
+  const [newPassword, setNewPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setUsers(getUsers());
+  }, [getUsers]);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await createUser(newUser.fullName, newUser.email, newUser.phoneNumber, newUser.password, newUser.role);
+      setUsers(getUsers());
+      setShowCreateModal(false);
+      setNewUser({ fullName: '', email: '', phoneNumber: '', password: '', role: 'CLIENT' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = (id: number) => {
+    if (confirm('Are you sure you want to delete this user?')) {
+      deleteUser(id);
+      setUsers(getUsers());
+    }
+  };
+
+  const handleResetPassword = () => {
+    if (selectedUser && newPassword) {
+      resetPassword(selectedUser.id, newPassword);
+      setShowResetModal(false);
+      setNewPassword('');
+      setSelectedUser(null);
+    }
+  };
+
+  const openResetModal = (user: DemoUser) => {
+    setSelectedUser(user);
+    setNewPassword('');
+    setShowResetModal(true);
+  };
+
+  return <AppShell role="super" eyebrow="Super Admin · User Management" title="Manage user accounts and roles">
+    <Panel>
+      <div className="panel-head">
+        <div>
+          <span className="tiny-label">Administration</span>
+          <h3>User Management</h3>
+        </div>
+        <button className="button button-primary" onClick={() => setShowCreateModal(true)}>
+          <Plus size={16} /> Create User
+        </button>
+      </div>
+
+      <div className="users-table">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left p-3">Name</th>
+              <th className="text-left p-3">Email</th>
+              <th className="text-left p-3">Role</th>
+              <th className="text-left p-3">Phone</th>
+              <th className="text-right p-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(user => (
+              <tr key={user.id} className="border-b">
+                <td className="p-3">{user.fullName}</td>
+                <td className="p-3">{user.email}</td>
+                <td className="p-3">
+                  <span className={`status-pill ${user.role === 'SUPER_ADMIN' ? 'green' : user.role === 'HUB_ADMIN' ? 'blue' : user.role === 'WAREHOUSE_MANAGER' ? 'purple' : user.role === 'DELIVERY_AGENT' ? 'amber' : 'gray'}`}>
+                    {user.role}
+                  </span>
+                </td>
+                <td className="p-3">{user.phoneNumber || '-'}</td>
+                <td className="p-3 text-right">
+                  <div className="flex gap-2 justify-end">
+                    <button className="icon-button" onClick={() => openResetModal(user)} title="Reset Password">
+                      <RefreshCw size={16} />
+                    </button>
+                    {user.id !== 1 && (
+                      <button className="icon-button" onClick={() => handleDeleteUser(user.id)} title="Delete User">
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-lg max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Create New User</h2>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={newUser.fullName}
+                  onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                  className="w-full p-2 border rounded"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  className="w-full p-2 border rounded"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  value={newUser.phoneNumber}
+                  onChange={(e) => setNewUser({ ...newUser, phoneNumber: e.target.value })}
+                  className="w-full p-2 border rounded"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block mb-1">Password</label>
+                <input
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  className="w-full p-2 border rounded"
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div>
+                <label className="block mb-1">Role</label>
+                <select
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as AuthRole })}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="CLIENT">Client</option>
+                  <option value="HUB_ADMIN">Hub Admin</option>
+                  <option value="WAREHOUSE_MANAGER">Warehouse Manager</option>
+                  <option value="DELIVERY_AGENT">Delivery Agent</option>
+                  <option value="SUPER_ADMIN">Super Admin</option>
+                </select>
+              </div>
+              {error && <div className="text-red-500 text-sm">{error}</div>}
+              <div className="flex gap-2 justify-end">
+                <button type="button" className="button button-secondary" onClick={() => setShowCreateModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="button button-primary" disabled={loading}>
+                  {loading ? 'Creating...' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showResetModal && selectedUser && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="modal-head">
+              <div>
+                <span className="tiny-label">Security</span>
+                <h3>Reset Password</h3>
+              </div>
+              <button className="icon-button" onClick={() => setShowResetModal(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); handleResetPassword(); }} className="space-y-4">
+              <div>
+                <label>User</label>
+                <input
+                  type="text"
+                  value={selectedUser.fullName}
+                  disabled
+                  className="w-full p-2 border rounded bg-muted"
+                />
+              </div>
+              <div>
+                <label>New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full p-2 border rounded"
+                  required
+                  minLength={8}
+                  placeholder="Enter new password (min 8 characters)"
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button type="button" className="button button-secondary" onClick={() => setShowResetModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="button button-primary">
+                  Reset Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </Panel>
+  </AppShell>;
+}
+
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <WorkspaceRoute role="client" clientPage={<ShopPage />}><AdminShopPage /></WorkspaceRoute>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/inventory">{() => <WorkspaceRoute role="warehouse"><InventoryPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/shop">{() => <WorkspaceRoute role="client" clientPage={<ShopPage />}><AdminShopPage /></WorkspaceRoute>}</Route><Route path="/orders">{() => <WorkspaceRoute role="hub" clientPage={<ClientOrdersPage />}><OrdersPage /></WorkspaceRoute>}</Route><Route path="/deliveries">{() => <WorkspaceRoute role="agent" clientPage={<ClientDeliveryStatusPage />}><DeliveriesPage /></WorkspaceRoute>}</Route><Route path="/inventory">{() => <WorkspaceRoute role="warehouse"><InventoryPage /></WorkspaceRoute>}</Route><Route path="/command">{() => <RoleGate role="super"><CommandPage /></RoleGate>}</Route><Route path="/pricing">{() => <RoleGate role="super"><PricingPage /></RoleGate>}</Route><Route path="/zones">{() => <RoleGate role="super"><ZonesPage /></RoleGate>}</Route><Route path="/users">{() => <RoleGate role="super"><UserManagementPage /></RoleGate>}</Route><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {

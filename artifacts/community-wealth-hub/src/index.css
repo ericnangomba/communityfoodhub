@@ -2364,6 +2364,239 @@ html, body {
   }
 }
 
+/* Tab Navigation Styles */
+.tab-navigation {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-button:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
+.tab-button.active {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+
+/* Orders Panel Full Width */
+.orders-panel-full {
+  margin-bottom: 0;
+}
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.order-card-full {
+  padding: 16px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+}
+
+.order-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.order-card-head h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 4px 0 0 0;
+}
+
+.order-details-full {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: hsl(var(--accent));
+  border-radius: 6px;
+}
+
+.order-details-full small {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+  display: block;
+}
+
+.order-details-full b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.order-items-full {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: hsl(var(--accent));
+  border-radius: 6px;
+}
+
+.order-line-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.order-line-item span:first-child {
+  flex: 1;
+}
+
+.order-line-item span:nth-child(2) {
+  font-weight: 600;
+  margin: 0 8px;
+}
+
+.order-line-item span:last-child {
+  font-weight: 600;
+  color: hsl(var(--primary));
+}
+
+/* Shopfront Panel */
+.shopfront-panel {
+  margin-bottom: 0;
+}
+
+.shopfront-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.shopfront-item {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.shopfront-item .item-art {
+  position: relative;
+  height: 120px;
+  background: hsl(var(--accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shopfront-item .stock-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.shopfront-item .item-info {
+  padding: 12px;
+}
+
+.shopfront-item .item-category {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.shopfront-item h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.shopfront-item p {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 8px 0;
+}
+
+.shopfront-item .price-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shopfront-item .price-row strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.shopfront-item .price-row del {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.shopfront-item .savings {
+  font-size: 10px;
+  color: hsl(var(--primary));
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.processed-orders-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid hsl(var(--border));
+}
+
+/* Mobile responsive for tabs */
+@media (max-width: 768px) {
+  .tab-navigation {
+    flex-wrap: wrap;
+  }
+  
+  .tab-button {
+    flex: 1;
+    min-width: 120px;
+    justify-content: center;
+  }
+  
+  .order-details-full {
+    grid-template-columns: 1fr;
+  }
+  
+  .shopfront-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
 /* Order Tracking Panel Styles */
 .order-tracking-panel {
   margin-bottom: 24px;
