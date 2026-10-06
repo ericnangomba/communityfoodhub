@@ -96,7 +96,7 @@ const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 type Role = 'client' | 'hub' | 'agent' | 'warehouse' | 'super';
 type AuthRole = 'CLIENT' | 'HUB_ADMIN' | 'DELIVERY_AGENT' | 'WAREHOUSE_MANAGER' | 'SUPER_ADMIN';
 type AuthUser = { id: number; name?: string; fullName: string | null; email: string; phoneNumber: string | null; role: AuthRole; hubId: number | null };
-type DemoUser = { id: number; email: string; password: string; fullName: string; role: AuthRole; phoneNumber: string };
+type DemoUser = { id: number; email: string; password: string; fullName: string; role: AuthRole; phoneNumber: string; hubId?: number | null };
 
 // Simple in-memory user store for prototyping
 const DEMO_USERS_KEY = 'cwh-demo-users';
@@ -1843,7 +1843,7 @@ function AccessPanel({ hubs }: { hubs: Hub[] }) {
   const [newUser, setNewUser] = useState({ fullName: '', email: '', phoneNumber: '', password: '', role: 'CLIENT' as AuthRole, hubId: null as number | null });
   
   useEffect(() => {
-    setUsers(getUsers());
+    setUsers(getUsers().map((user) => ({ ...user, hubId: user.hubId ?? null })));
   }, [getUsers]);
   
   const assign = async (userId: number, role: AuthRole, hubId: number | null) => { 
